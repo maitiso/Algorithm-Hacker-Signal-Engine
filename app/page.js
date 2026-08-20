@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+const WS_URL =
+  "wss://api.derivws.com/trading/v1/options/ws/public";
+
 const CONTRACTS = [
   ["matches", "MATCHES"],
   ["differs", "DIFFERS"],
@@ -23,15 +26,20 @@ const SYMBOLS = [
 ];
 
 function getLastDigit(price) {
-  const value = String(price);
-  const digits = value.replace(/\D/g, "");
+  const text = String(price);
+  const digits = text.replace(/\D/g, "");
 
   if (!digits.length) return null;
 
-  return Number(digits[digits.length - 1]);
+  return Number(digits.at(-1));
 }
 
-function analyse(digits, prices, type, target) {
+function calculateAnalysis(
+  digits,
+  prices,
+  contract,
+  target
+) {
   if (digits.length < 30) {
     return {
       score: 0,
@@ -44,22 +52,19 @@ function analyse(digits, prices, type, target) {
   let score = 50;
   const patterns = [];
 
-  const even =
+  const evenRate =
     recent.filter((d) => d % 2 === 0).length /
     recent.length;
 
-  const over =
+  const highRate =
     recent.filter((d) => d >= 5).length /
     recent.length;
 
   const frequency = Array(10).fill(0);
 
-  recent.forEach((d) => {
-    frequency[d]++;
+  recent.forEach((digit) => {
+    frequency[digit]++;
   });
-
-  const highestFrequency =
-    Math.max(...frequency);
 
   if (
     recent.length >= 2 &&
@@ -69,82 +74,118 @@ function analyse(digits, prices, type, target) {
     patterns.push("repetition");
   }
 
-  if (highestFrequency >= 5) {
+  if (Math.max(...frequency) >= 5) {
     score += 7;
     patterns.push("digit cluster");
   }
 
-  if (type === "even" && even > 0.55) {
+  if (
+    contract === "even" &&
+    evenRate > 0.55
+  ) {
     score += 12;
     patterns.push("even bias");
   }
 
-  if (type === "odd" && even < 0.45) {
+  if (
+    contract === "odd" &&
+    evenRate < 0.45
+  ) {
     score += 12;
     patterns.push("odd bias");
   }
 
-  if (type === "over" && over > 0.55) {
+  if (
+    contract === "over" &&
+    highRate > 0.55
+  ) {
     score += 12;
     patterns.push("over bias");
   }
 
-  if (type === "under" && over < 0.45) {
+  if (
+    contract === "under" &&
+    highRate < 0.45
+  ) {
     score += 12;
     patterns.push("under bias");
   }
 
-  if (type === "matches") {
+  if (contract === "matches") {
     const rate =
       frequency[target] / recent.length;
 
     if (rate > 0.1) {
       score += 15;
-      patterns.push(`digit ${target} concentration`);
+      patterns.push(
+        `digit ${target} concentration`
+      );
     }
   }
 
-  if (type === "differs") {
+  if (contract === "differs") {
     const rate =
       frequency[target] / recent.length;
 
     if (rate < 0.1) {
       score += 12;
-      patterns.push(`digit ${target} scarcity`);
+      patterns.push(
+        `digit ${target} scarcity`
+      );
     }
   }
 
   if (
-    (type === "rise" || type === "fall") &&
+    (contract === "rise" ||
+      contract === "fall") &&
     prices.length >= 8
   ) {
-    const p = prices.slice(-8);
+    const recentPrices = prices.slice(-8);
 
     let rises = 0;
     let falls = 0;
 
-    for (let i = 1; i < p.length; i++) {
-      if (p[i] > p[i - 1]) rises++;
-      if (p[i] < p[i - 1]) falls++;
+    for (
+      let i = 1;
+      i < recentPrices.length;
+      i++
+    ) {
+      if (
+        recentPrices[i] >
+        recentPrices[i - 1]
+      ) {
+        rises++;
+      }
+
+      if (
+        recentPrices[i] <
+        recentPrices[i - 1]
+      ) {
+        falls++;
+      }
     }
 
-    if (type === "rise" && rises >= 5) {
+    if (
+      contract === "rise" &&
+      rises >= 5
+    ) {
       score += 18;
       patterns.push("upward pressure");
     }
 
-    if (type === "fall" && falls >= 5) {
+    if (
+      contract === "fall" &&
+      falls >= 5
+    ) {
       score += 18;
       patterns.push("downward pressure");
     }
   }
 
-  score = Math.min(99, Math.max(0, score));
-
   return {
-    score,
+    score: Math.min(99, score),
     pattern:
-      patterns.length
+      patterns.length > 0
         ? patterns.slice(0, 3).join(" + ")
         : "mixed conditions",
   };
@@ -152,27 +193,47 @@ function analyse(digits, prices, type, target) {
 
 export default function Home() {
   const socketRef = useRef(null);
-  const reconnectTimer = useRef(null);
+  const reconnectRef = useRef(null);
+  const mountedRef = useRef(true);
 
-  const [symbol, setSymbol] = useState("R_50");
-  const [contract, setContract] = useState("over");
+  const [symbol, setSymbol] =
+    useState("R_50");
 
-  const [prices, setPrices] = useState([]);
-  const [digits, setDigits] = useState([]);
+  const [contract, setContract] =
+    useState("over");
 
-  const [connected, setConnected] = useState(false);
-  const [status, setStatus] = useState("Connecting...");
-  const [error, setError] = useState("");
+  const [target, setTarget] =
+    useState(7);
 
-  const [target, setTarget] = useState(7);
+  const [prices, setPrices] =
+    useState([]);
 
-  const [tickCount, setTickCount] = useState(0);
+  const [digits, setDigits] =
+    useState([]);
 
-  const [signals, setSignals] = useState([]);
+  const [connected, setConnected] =
+    useState(false);
+
+  const [status, setStatus] =
+    useState("Connecting...");
+
+  const [error, setError] =
+    useState("");
+
+  const [serverMessage, setServerMessage] =
+    useState("");
+
+  const [tickCount, setTickCount] =
+    useState(0);
+
+  const [signals, setSignals] =
+    useState([]);
 
   const connect = () => {
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
+    if (!mountedRef.current) return;
+
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
     }
 
     if (socketRef.current) {
@@ -181,89 +242,142 @@ export default function Home() {
       } catch {}
     }
 
-    setStatus("Connecting...");
+    setConnected(false);
+    setStatus("Connecting to Deriv...");
     setError("");
+    setServerMessage("");
 
-    const ws = new WebSocket(
-      "wss://ws.binaryws.com/websockets/v3"
-    );
+    let ws;
 
-    socketRef.current = ws;
+    try {
+      ws = new WebSocket(WS_URL);
+      socketRef.current = ws;
+    } catch (err) {
+      setStatus("WebSocket creation failed");
+      setError(String(err));
+      return;
+    }
 
     ws.onopen = () => {
-      console.log("Deriv WebSocket connected");
+      if (!mountedRef.current) return;
+
+      console.log(
+        "Connected to Deriv public WebSocket"
+      );
 
       setConnected(true);
       setStatus("Connected");
       setError("");
 
       /*
-       * Load historical ticks first
+       * Ask Deriv for available symbols.
        */
-
       ws.send(
         JSON.stringify({
-          ticks_history: symbol,
-          adjust_start_time: 1,
-          count: 200,
-          end: "latest",
-          start: 1,
-          style: "ticks",
+          active_symbols: "brief",
+          product_type: "basic",
+          req_id: 1,
         })
       );
 
       /*
-       * Then subscribe to live ticks
+       * Request historical ticks.
        */
+      ws.send(
+        JSON.stringify({
+          ticks_history: symbol,
+          count: 200,
+          end: "latest",
+          style: "ticks",
+          req_id: 2,
+        })
+      );
 
+      /*
+       * Subscribe to live ticks.
+       */
       ws.send(
         JSON.stringify({
           ticks: symbol,
           subscribe: 1,
+          req_id: 3,
         })
       );
     };
 
     ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+      if (!mountedRef.current) return;
 
-        console.log("DERIV:", data);
+      try {
+        const data =
+          JSON.parse(event.data);
+
+        console.log(
+          "DERIV MESSAGE:",
+          data
+        );
+
+        setServerMessage(
+          data.msg_type ||
+            "message received"
+        );
 
         /*
          * API error
          */
-
         if (data.error) {
           setError(
             data.error.message ||
               "Deriv API error"
           );
 
+          setStatus("Deriv API error");
+
           return;
         }
 
         /*
-         * Historical data
+         * Active symbols response.
          */
+        if (
+          data.msg_type ===
+          "active_symbols"
+        ) {
+          const exists =
+            data.active_symbols?.some(
+              (item) =>
+                item.symbol === symbol
+            );
 
+          if (!exists) {
+            setError(
+              `${symbol} was not returned by Deriv active_symbols`
+            );
+          }
+        }
+
+        /*
+         * Historical tick data.
+         */
         if (
           data.msg_type === "history" &&
-          data.history &&
-          data.history.prices
+          data.history?.prices
         ) {
-          const historicalPrices =
-            data.history.prices.map(Number);
+          const historical =
+            data.history.prices.map(
+              Number
+            );
 
           const historicalDigits =
-            historicalPrices
+            historical
               .map(getLastDigit)
               .filter(
-                (digit) => digit !== null
+                (digit) =>
+                  digit !== null
               );
 
           setPrices(
-            historicalPrices.slice(-300)
+            historical.slice(-300)
           );
 
           setDigits(
@@ -276,24 +390,28 @@ export default function Home() {
         }
 
         /*
-         * Live tick
+         * Live tick.
          */
-
         if (
           data.msg_type === "tick" &&
           data.tick
         ) {
-          const price =
+          const quote =
             Number(data.tick.quote);
 
           const digit =
-            getLastDigit(price);
+            getLastDigit(quote);
 
-          if (digit === null) return;
+          if (
+            !Number.isFinite(quote) ||
+            digit === null
+          ) {
+            return;
+          }
 
           setPrices((previous) => [
             ...previous.slice(-299),
-            price,
+            quote,
           ]);
 
           setDigits((previous) => [
@@ -302,7 +420,8 @@ export default function Home() {
           ]);
 
           setTickCount(
-            (previous) => previous + 1
+            (previous) =>
+              previous + 1
           );
 
           setStatus(
@@ -312,38 +431,51 @@ export default function Home() {
           setError("");
         }
       } catch (err) {
-        console.error(
-          "Message parsing error:",
-          err
-        );
+        console.error(err);
 
         setError(
-          "Unable to read Deriv response"
+          "Could not parse Deriv response"
         );
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (event) => {
       console.error(
-        "Deriv WebSocket error"
+        "DERIV WEBSOCKET ERROR:",
+        event
       );
 
+      if (!mountedRef.current) return;
+
       setConnected(false);
-      setStatus("Connection error");
+      setStatus(
+        "WebSocket connection error"
+      );
+
       setError(
-        "WebSocket connection failed"
+        "Browser could not establish the Deriv WebSocket connection."
       );
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log(
+        "Deriv socket closed:",
+        event.code,
+        event.reason
+      );
+
+      if (!mountedRef.current) return;
+
       setConnected(false);
-      setStatus("Disconnected");
+
+      setStatus(
+        `Disconnected (${event.code})`
+      );
 
       /*
-       * Automatically reconnect
+       * Retry after 5 seconds.
        */
-
-      reconnectTimer.current =
+      reconnectRef.current =
         setTimeout(() => {
           connect();
         }, 5000);
@@ -351,35 +483,369 @@ export default function Home() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
+
     connect();
 
     return () => {
-      if (reconnectTimer.current) {
+      mountedRef.current = false;
+
+      if (reconnectRef.current) {
         clearTimeout(
-          reconnectTimer.current
+          reconnectRef.current
         );
       }
 
       if (socketRef.current) {
-        socketRef.current.close();
+        try {
+          socketRef.current.close();
+        } catch {}
       }
     };
   }, [symbol]);
 
-  const analysis = useMemo(() => {
-    return analyse(
+  const analysis = useMemo(
+    () =>
+      calculateAnalysis(
+        digits,
+        prices,
+        contract,
+        Number(target)
+      ),
+    [
       digits,
       prices,
       contract,
-      Number(target)
-    );
-  }, [
-    digits,
-    prices,
-    contract,
-    target,
-  ]);
+      target,
+    ]
+  );
 
   useEffect(() => {
     if (
-     
+      analysis.score < 75 ||
+      digits.length < 30 ||
+      tickCount === 0
+    ) {
+      return;
+    }
+
+    const label =
+      CONTRACTS.find(
+        ([id]) => id === contract
+      )?.[1];
+
+    const signal = {
+      id:
+        `${tickCount}-${contract}-${analysis.score}`,
+      time:
+        new Date().toLocaleTimeString(),
+      type: label,
+      score: analysis.score,
+      pattern: analysis.pattern,
+    };
+
+    setSignals((previous) => {
+      if (
+        previous.some(
+          (item) =>
+            item.id === signal.id
+        )
+      ) {
+        return previous;
+      }
+
+      return [
+        signal,
+        ...previous,
+      ].slice(0, 20);
+    });
+  }, [
+    tickCount,
+    analysis,
+    contract,
+    digits.length,
+  ]);
+
+  const price = prices.at(-1);
+  const lastDigit = digits.at(-1);
+
+  const strength =
+    analysis.score >= 80
+      ? "STRONG"
+      : analysis.score >= 75
+      ? "VALID"
+      : analysis.score >= 60
+      ? "WATCH"
+      : "WAIT";
+
+  return (
+    <main className="app">
+
+      <header className="header">
+
+        <div>
+          <h1>
+            ALGORITHM HACKER
+          </h1>
+
+          <p>
+            SIGNAL ENGINE
+          </p>
+        </div>
+
+        <div
+          className={
+            connected
+              ? "status connected"
+              : "status"
+          }
+        >
+          ● {status}
+        </div>
+
+      </header>
+
+      {error && (
+        <div className="errorBox">
+          DERIV: {error}
+        </div>
+      )}
+
+      <div className="serverBox">
+        API MESSAGE:{" "}
+        {serverMessage || "waiting..."}
+      </div>
+
+      <section className="controls">
+
+        <label>
+          MARKET
+
+          <select
+            value={symbol}
+            onChange={(e) =>
+              setSymbol(e.target.value)
+            }
+          >
+            {SYMBOLS.map(
+              (item) => (
+                <option
+                  key={item}
+                  value={item}
+                >
+                  {item}
+                </option>
+              )
+            )}
+          </select>
+        </label>
+
+        <label>
+          TARGET DIGIT
+
+          <input
+            type="number"
+            min="0"
+            max="9"
+            value={target}
+            onChange={(e) =>
+              setTarget(e.target.value)
+            }
+          />
+        </label>
+
+        <button
+          onClick={connect}
+        >
+          RECONNECT
+        </button>
+
+      </section>
+
+      <section className="tabs">
+
+        {CONTRACTS.map(
+          ([id, label]) => (
+            <button
+              key={id}
+              className={
+                contract === id
+                  ? "tab active"
+                  : "tab"
+              }
+              onClick={() =>
+                setContract(id)
+              }
+            >
+              {label}
+            </button>
+          )
+        )}
+
+      </section>
+
+      <section className="dashboard">
+
+        <div className="card">
+
+          <p>
+            LIVE PRICE
+          </p>
+
+          <div className="price">
+            {price ?? "—"}
+          </div>
+
+          <p>
+            LAST DIGIT
+          </p>
+
+          <div className="lastDigit">
+            {lastDigit ?? "—"}
+          </div>
+
+          <p>
+            LIVE TICKS
+          </p>
+
+          <div className="tickCount">
+            {tickCount}
+          </div>
+
+        </div>
+
+        <div className="card">
+
+          <p>
+            RECENT LAST DIGITS
+          </p>
+
+          <div className="digits">
+
+            {digits
+              .slice(-40)
+              .map(
+                (digit, index) => (
+                  <span
+                    key={index}
+                  >
+                    {digit}
+                  </span>
+                )
+              )}
+
+          </div>
+
+          <p className="patternTitle">
+            PATTERN
+          </p>
+
+          <strong>
+            {analysis.pattern}
+          </strong>
+
+        </div>
+
+        <div className="card">
+
+          <p>
+            MODEL SCORE
+          </p>
+
+          <div className="confidence">
+            {analysis.score}%
+          </div>
+
+          <div className="meter">
+
+            <div
+              style={{
+                width:
+                  `${analysis.score}%`,
+              }}
+            />
+
+          </div>
+
+          <div className="strength">
+            {strength}
+          </div>
+
+          <div className="signal">
+
+            <p>
+              SIGNAL
+            </p>
+
+            <strong>
+              {
+                CONTRACTS.find(
+                  ([id]) =>
+                    id === contract
+                )?.[1]
+              }
+            </strong>
+
+            <span>
+              ENTRY: NEXT TICK
+            </span>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <section className="card history">
+
+        <h2>
+          SIGNAL HISTORY
+        </h2>
+
+        {signals.length === 0 ? (
+
+          <div className="empty">
+            Waiting for a valid signal...
+          </div>
+
+        ) : (
+
+          signals.map(
+            (signal) => (
+              <div
+                className="historyRow"
+                key={signal.id}
+              >
+
+                <span>
+                  {signal.time}
+                </span>
+
+                <strong>
+                  {signal.type}
+                </strong>
+
+                <b>
+                  {signal.score}%
+                </b>
+
+                <small>
+                  {signal.pattern}
+                </small>
+
+              </div>
+            )
+          )
+
+        )}
+
+      </section>
+
+      <footer>
+        SIGNAL-ONLY MODE • REAL DERIV DATA •
+        NO TRADE EXECUTION
+      </footer>
+
+    </main>
+  );
+}
