@@ -6,36 +6,12 @@ const WS_URL =
   "wss://api.derivws.com/trading/v1/options/ws/public";
 
 const MARKETS = [
-  {
-    name: "Volatility 50",
-    code: "R_50",
-    chartColor: "#22C55E",
-  },
-  {
-    name: "Volatility 50 (1s)",
-    code: "1HZ50V",
-    chartColor: "#22C55E",
-  },
-  {
-    name: "Volatility 75",
-    code: "R_75",
-    chartColor: "#EF4444",
-  },
-  {
-    name: "Volatility 100",
-    code: "R_100",
-    chartColor: "#22C55E",
-  },
-  {
-    name: "Volatility 75 (1s)",
-    code: "1HZ75V",
-    chartColor: "#EF4444",
-  },
-  {
-    name: "Volatility 100 (1s)",
-    code: "1HZ100V",
-    chartColor: "#22C55E",
-  },
+  { name: "Volatility 50", code: "R_50", color: "#22C55E" },
+  { name: "Volatility 50 (1s)", code: "1HZ50V", color: "#22C55E" },
+  { name: "Volatility 75", code: "R_75", color: "#EF4444" },
+  { name: "Volatility 100", code: "R_100", color: "#22C55E" },
+  { name: "Volatility 75 (1s)", code: "1HZ75V", color: "#EF4444" },
+  { name: "Volatility 100 (1s)", code: "1HZ100V", color: "#22C55E" },
 ];
 
 const PAIRS = [
@@ -77,17 +53,12 @@ function getLastDigit(price) {
   const text = String(price);
   const digits = text.replace(/\D/g, "");
 
-  if (!digits.length) return null;
-
-  return Number(digits.at(-1));
+  return digits.length
+    ? Number(digits.at(-1))
+    : null;
 }
 
-function calculateAnalysis(
-  digits,
-  prices,
-  contract,
-  target
-) {
+function analyze(digits, prices, contract, target) {
   if (digits.length < 30) {
     return {
       score: 0,
@@ -96,23 +67,22 @@ function calculateAnalysis(
   }
 
   const recent = digits.slice(-30);
+  const frequency = Array(10).fill(0);
 
-  let score = 50;
-  const patterns = [];
+  recent.forEach((d) => {
+    frequency[d]++;
+  });
 
   const evenRate =
     recent.filter((d) => d % 2 === 0).length /
     recent.length;
 
-  const highRate =
+  const overRate =
     recent.filter((d) => d >= 5).length /
     recent.length;
 
-  const frequency = Array(10).fill(0);
-
-  recent.forEach((digit) => {
-    frequency[digit]++;
-  });
+  let score = 50;
+  const patterns = [];
 
   if (
     recent.length >= 2 &&
@@ -127,104 +97,64 @@ function calculateAnalysis(
     patterns.push("digit cluster");
   }
 
-  if (
-    contract === "even" &&
-    evenRate > 0.55
-  ) {
+  if (contract === "even" && evenRate > 0.55) {
     score += 12;
     patterns.push("even bias");
   }
 
-  if (
-    contract === "odd" &&
-    evenRate < 0.45
-  ) {
+  if (contract === "odd" && evenRate < 0.45) {
     score += 12;
     patterns.push("odd bias");
   }
 
-  if (
-    contract === "over" &&
-    highRate > 0.55
-  ) {
+  if (contract === "over" && overRate > 0.55) {
     score += 12;
     patterns.push("over bias");
   }
 
-  if (
-    contract === "under" &&
-    highRate < 0.45
-  ) {
+  if (contract === "under" && overRate < 0.45) {
     score += 12;
     patterns.push("under bias");
   }
 
   if (contract === "matches") {
-    const rate =
-      frequency[target] / recent.length;
+    const rate = frequency[target] / recent.length;
 
     if (rate > 0.1) {
       score += 15;
-      patterns.push(
-        `digit ${target} concentration`
-      );
+      patterns.push(`digit ${target} concentration`);
     }
   }
 
   if (contract === "differs") {
-    const rate =
-      frequency[target] / recent.length;
+    const rate = frequency[target] / recent.length;
 
     if (rate < 0.1) {
       score += 12;
-      patterns.push(
-        `digit ${target} scarcity`
-      );
+      patterns.push(`digit ${target} scarcity`);
     }
   }
 
   if (
-    (contract === "rise" ||
-      contract === "fall") &&
+    (contract === "rise" || contract === "fall") &&
     prices.length >= 8
   ) {
-    const recentPrices = prices.slice(-8);
+    const p = prices.slice(-8);
 
     let rises = 0;
     let falls = 0;
 
-    for (
-      let i = 1;
-      i < recentPrices.length;
-      i++
-    ) {
-      if (
-        recentPrices[i] >
-        recentPrices[i - 1]
-      ) {
-        rises++;
-      }
-
-      if (
-        recentPrices[i] <
-        recentPrices[i - 1]
-      ) {
-        falls++;
-      }
+    for (let i = 1; i < p.length; i++) {
+      if (p[i] > p[i - 1]) rises++;
+      if (p[i] < p[i - 1]) falls++;
     }
 
-    if (
-      contract === "rise" &&
-      rises >= 5
-    ) {
+    if (contract === "rise" && rises >= 5) {
       score += 18;
       patterns.push("upward pressure");
     }
 
-    if (
-      contract === "fall" &&
-      falls >= 5
-    ) {
+    if (contract === "fall" && falls >= 5) {
       score += 18;
       patterns.push("downward pressure");
     }
@@ -239,162 +169,88 @@ function calculateAnalysis(
   };
 }
 
-function getPredictionText(
-  contract,
-  target
-) {
-  switch (contract) {
-    case "matches":
-      return `MATCHES ${target}`;
+function predictionText(contract, target) {
+  const values = {
+    matches: `MATCHES ${target}`,
+    differs: `DIFFERS ${target}`,
+    under: "UNDER 5",
+    over: "OVER 4",
+    even: "EVEN",
+    odd: "ODD",
+    rise: "RISE",
+    fall: "FALL",
+  };
 
-    case "differs":
-      return `DIFFERS ${target}`;
-
-    case "under":
-      return "UNDER 5";
-
-    case "over":
-      return "OVER 4";
-
-    case "even":
-      return "EVEN";
-
-    case "odd":
-      return "ODD";
-
-    case "rise":
-      return "RISE";
-
-    case "fall":
-      return "FALL";
-
-    default:
-      return "WAITING";
-  }
+  return values[contract] || "WAITING";
 }
 
-function getPredictionSubtext(
-  contract,
-  target
-) {
-  switch (contract) {
-    case "matches":
-      return `Last digit = ${target}`;
+function predictionSubtext(contract, target) {
+  const values = {
+    matches: `Last digit = ${target}`,
+    differs: `Last digit ≠ ${target}`,
+    under: "Last digit < 5 • wins on 0–4",
+    over: "Last digit > 4 • wins on 5–9",
+    even: "Last digit is even • 0, 2, 4, 6, 8",
+    odd: "Last digit is odd • 1, 3, 5, 7, 9",
+    rise: "Next price expected to rise",
+    fall: "Next price expected to fall",
+  };
 
-    case "differs":
-      return `Last digit ≠ ${target}`;
-
-    case "under":
-      return "Last digit < 5 • wins on 0–4";
-
-    case "over":
-      return "Last digit > 4 • wins on 5–9";
-
-    case "even":
-      return "Last digit is even • 0,2,4,6,8";
-
-    case "odd":
-      return "Last digit is odd • 1,3,5,7,9";
-
-    case "rise":
-      return "Next price expected to rise";
-
-    case "fall":
-      return "Next price expected to fall";
-
-    default:
-      return "Waiting for analysis";
-  }
+  return values[contract] || "Waiting for analysis";
 }
 
-function getPredictionBadge(
-  contract,
-  target
-) {
-  switch (contract) {
-    case "under":
-      return "U5";
+function badge(contract, target) {
+  const values = {
+    matches: `M${target}`,
+    differs: `D${target}`,
+    under: "U5",
+    over: "O4",
+    even: "EV",
+    odd: "OD",
+    rise: "RI",
+    fall: "FA",
+  };
 
-    case "over":
-      return "O4";
-
-    case "matches":
-      return `M${target}`;
-
-    case "differs":
-      return `D${target}`;
-
-    case "even":
-      return "EV";
-
-    case "odd":
-      return "OD";
-
-    case "rise":
-      return "RI";
-
-    case "fall":
-      return "FA";
-
-    default:
-      return "--";
-  }
+  return values[contract] || "--";
 }
 
 export default function Home() {
   const socketRef = useRef(null);
   const reconnectRef = useRef(null);
-  const mountedRef = useRef(true);
+  const mountedRef = useRef(false);
 
-  const [symbol, setSymbol] =
-    useState("R_50");
+  const [symbol, setSymbol] = useState("R_50");
+  const [contract, setContract] = useState("over");
+  const [target, setTarget] = useState(7);
 
-  const [contract, setContract] =
-    useState("over");
+  const [prices, setPrices] = useState([]);
+  const [digits, setDigits] = useState([]);
 
-  const [target, setTarget] =
-    useState(7);
+  const [connected, setConnected] = useState(false);
+  const [status, setStatus] = useState("Connecting...");
+  const [error, setError] = useState("");
+  const [serverMessage, setServerMessage] = useState("");
+  const [tickCount, setTickCount] = useState(0);
 
-  const [prices, setPrices] =
-    useState([]);
-
-  const [digits, setDigits] =
-    useState([]);
-
-  const [connected, setConnected] =
-    useState(false);
-
-  const [status, setStatus] =
-    useState("Connecting...");
-
-  const [error, setError] =
-    useState("");
-
-  const [serverMessage, setServerMessage] =
-    useState("");
-
-  const [tickCount, setTickCount] =
-    useState(0);
-
-  const [signals, setSignals] =
-    useState([]);
+  const [signals, setSignals] = useState([]);
 
   /*
-   * Entry countdown.
-   *
-   * This is a real UI countdown.
-   * It does NOT randomly jump from 4
-   * to 1 every second.
+   * Countdown is independent from incoming ticks.
    */
+  const [entryAt, setEntryAt] = useState(
+    Date.now() + 3000
+  );
+
   const [entryCountdown, setEntryCountdown] =
     useState(3);
 
-  /*
-   * Which prediction button is selected
-   */
-  const [activePair, setActivePair] =
-    useState("underOver");
+  const currentMarket =
+    MARKETS.find((m) => m.code === symbol) ||
+    MARKETS[0];
 
+  /*
+   * Start Deriv connection
+   */
   const connect = () => {
     if (!mountedRef.current) return;
 
@@ -429,7 +285,11 @@ export default function Home() {
 
       setConnected(true);
       setStatus("Connected");
-      setError("");
+
+      /*
+       * IMPORTANT:
+       * No product_type here.
+       */
 
       ws.send(
         JSON.stringify({
@@ -479,21 +339,9 @@ export default function Home() {
           return;
         }
 
-        if (
-          data.msg_type === "active_symbols"
-        ) {
-          const exists =
-            data.active_symbols?.some(
-              (item) =>
-                item.symbol === symbol
-            );
-
-          if (!exists) {
-            setError(
-              `${symbol} was not returned by Deriv active_symbols`
-            );
-          }
-        }
+        /*
+         * Historical data
+         */
 
         if (
           data.msg_type === "history" &&
@@ -506,8 +354,7 @@ export default function Home() {
             historical
               .map(getLastDigit)
               .filter(
-                (digit) =>
-                  digit !== null
+                (d) => d !== null
               );
 
           setPrices(
@@ -522,6 +369,10 @@ export default function Home() {
             "Connected • History loaded"
           );
         }
+
+        /*
+         * LIVE TICK
+         */
 
         if (
           data.msg_type === "tick" &&
@@ -551,15 +402,12 @@ export default function Home() {
           ]);
 
           setTickCount(
-            (previous) =>
-              previous + 1
+            (previous) => previous + 1
           );
 
           /*
-           * Each new real tick starts
-           * a fresh entry countdown.
+           * DO NOT reset the countdown here.
            */
-          setEntryCountdown(3);
 
           setStatus(
             "LIVE • Receiving ticks"
@@ -580,7 +428,6 @@ export default function Home() {
       if (!mountedRef.current) return;
 
       setConnected(false);
-
       setStatus(
         "WebSocket connection error"
       );
@@ -594,7 +441,6 @@ export default function Home() {
       if (!mountedRef.current) return;
 
       setConnected(false);
-
       setStatus(
         `Disconnected (${event.code})`
       );
@@ -607,7 +453,7 @@ export default function Home() {
   };
 
   /*
-   * Connect when market changes
+   * Connect / reconnect when market changes
    */
 
   useEffect(() => {
@@ -633,11 +479,179 @@ export default function Home() {
   }, [symbol]);
 
   /*
-   * Entry countdown.
-   *
-   * It counts:
+   * REAL COUNTDOWN
    *
    * 3 → 2 → 1 → ENTER NOW
-   *
-   * It does NOT randomly change.
-  
+   */
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const remaining = Math.max(
+        0,
+        Math.ceil(
+          (entryAt - Date.now()) /
+            1000
+        )
+      );
+
+      setEntryCountdown(remaining);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [entryAt]);
+
+  /*
+   * Start a new prediction cycle
+   */
+
+  const restartEntryCountdown = () => {
+    setEntryAt(
+      Date.now() + 3000
+    );
+  };
+
+  /*
+   * Analysis
+   */
+
+  const analysis = useMemo(
+    () =>
+      analyze(
+        digits,
+        prices,
+        contract,
+        Number(target)
+      ),
+    [
+      digits,
+      prices,
+      contract,
+      target,
+    ]
+  );
+
+  const strength =
+    analysis.score >= 80
+      ? "STRONG"
+      : analysis.score >= 75
+      ? "VALID"
+      : analysis.score >= 60
+      ? "WATCH"
+      : "WAIT";
+
+  /*
+   * Signal history
+   */
+
+  useEffect(() => {
+    if (
+      analysis.score < 75 ||
+      digits.length < 30 ||
+      tickCount === 0
+    ) {
+      return;
+    }
+
+    const signal = {
+      id:
+        `${tickCount}-${contract}-${analysis.score}`,
+      time:
+        new Date().toLocaleTimeString(),
+      type:
+        predictionText(
+          contract,
+          Number(target)
+        ),
+      score: analysis.score,
+      pattern: analysis.pattern,
+    };
+
+    setSignals((previous) => {
+      if (
+        previous.some(
+          (item) =>
+            item.id === signal.id
+        )
+      ) {
+        return previous;
+      }
+
+      return [
+        signal,
+        ...previous,
+      ].slice(0, 20);
+    });
+  }, [
+    tickCount,
+    analysis,
+    contract,
+    target,
+    digits.length,
+  ]);
+
+  /*
+   * Currently selected pair
+   */
+
+  const activePair =
+    PAIRS.find((pair) =>
+      pair.options.some(
+        ([id]) =>
+          id === contract
+      )
+    );
+
+  const price = prices.at(-1);
+  const lastDigit = digits.at(-1);
+
+  return (
+    <main className="app">
+
+      {/* HEADER */}
+
+      <header className="header">
+
+        <div>
+          <h1>
+            ALGORITHM HACKER
+          </h1>
+
+          <p>
+            SIGNAL ENGINE
+          </p>
+        </div>
+
+        <div
+          className={
+            connected
+              ? "status connected"
+              : "status"
+          }
+        >
+          ●{" "}
+          {connected
+            ? "LIVE"
+            : status}
+        </div>
+
+      </header>
+
+      {/* ERROR */}
+
+      {error && (
+        <div className="errorBox">
+          DERIV: {error}
+        </div>
+      )}
+
+      {/* API */}
+
+      <div className="serverBox">
+        API MESSAGE:{" "}
+        {serverMessage ||
+          "waiting..."}
+      </div>
+
+      {/* MARKET */}
+
+      <section className="
