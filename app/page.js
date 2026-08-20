@@ -1,15 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const WS_URL =
   "wss://api.derivws.com/trading/v1/options/ws/public";
 
-/* =========================================================
-   REAL DERIV MARKETS
-========================================================= */
-
-const markets = [
+const MARKETS = [
   {
     name: "Volatility 50",
     code: "R_50",
@@ -26,14 +22,14 @@ const markets = [
     chartColor: "#EF4444",
   },
   {
-    name: "Volatility 75 (1s)",
-    code: "1HZ75V",
-    chartColor: "#EF4444",
-  },
-  {
     name: "Volatility 100",
     code: "R_100",
     chartColor: "#22C55E",
+  },
+  {
+    name: "Volatility 75 (1s)",
+    code: "1HZ75V",
+    chartColor: "#EF4444",
   },
   {
     name: "Volatility 100 (1s)",
@@ -42,36 +38,46 @@ const markets = [
   },
 ];
 
-/* =========================================================
-   PAIRED CONTRACT TABS
-========================================================= */
+/*
+ * FOUR PAIRS
+ *
+ * Each pair is a separate prediction family.
+ */
 
-const tabs = [
+const PAIRS = [
   {
-    id: "matches_differs",
-    left: "MATCHES",
-    right: "DIFFERS",
+    id: "matchesDiffers",
+    label: "MATCHES / DIFFERS",
+    options: [
+      ["matches", "MATCHES"],
+      ["differs", "DIFFERS"],
+    ],
   },
   {
-    id: "under_over",
-    left: "UNDER",
-    right: "OVER",
+    id: "underOver",
+    label: "UNDER / OVER",
+    options: [
+      ["under", "UNDER"],
+      ["over", "OVER"],
+    ],
   },
   {
-    id: "even_odd",
-    left: "EVEN",
-    right: "ODD",
+    id: "evenOdd",
+    label: "EVEN / ODD",
+    options: [
+      ["even", "EVEN"],
+      ["odd", "ODD"],
+    ],
   },
   {
-    id: "rise_fall",
-    left: "RISE",
-    right: "FALL",
+    id: "riseFall",
+    label: "RISE / FALL",
+    options: [
+      ["rise", "RISE"],
+      ["fall", "FALL"],
+    ],
   },
 ];
-
-/* =========================================================
-   GET LAST DIGIT
-========================================================= */
 
 function getLastDigit(price) {
   const text = String(price);
@@ -82,26 +88,34 @@ function getLastDigit(price) {
   return Number(digits.at(-1));
 }
 
-/* =========================================================
-   ANALYSIS ENGINE
-========================================================= */
-
 function calculateAnalysis(
   digits,
   prices,
-  activeTab,
+  contract,
   target
 ) {
   if (digits.length < 30) {
     return {
-      leftScore: 0,
-      rightScore: 0,
-      prediction: "WAIT",
+      score: 0,
       pattern: "Collecting tick data",
     };
   }
 
   const recent = digits.slice(-30);
+
+  let score = 50;
+
+  const patterns = [];
+
+  const evenRate =
+    recent.filter(
+      (d) => d % 2 === 0
+    ).length / recent.length;
+
+  const highRate =
+    recent.filter(
+      (d) => d >= 5
+    ).length / recent.length;
 
   const frequency = Array(10).fill(0);
 
@@ -109,88 +123,122 @@ function calculateAnalysis(
     frequency[digit]++;
   });
 
-  let leftScore = 50;
-  let rightScore = 50;
+  /*
+   * Repetition
+   */
 
-  const patterns = [];
+  if (
+    recent.length >= 2 &&
+    recent.at(-1) === recent.at(-2)
+  ) {
+    score += 8;
+    patterns.push("repetition");
+  }
 
-  /* ================= MATCHES / DIFFERS ================= */
+  /*
+   * Digit cluster
+   */
 
-  if (activeTab === "matches_differs") {
-    const matchRate =
-      frequency[target] / recent.length;
+  if (Math.max(...frequency) >= 5) {
+    score += 7;
+    patterns.push("digit cluster");
+  }
 
-    leftScore =
-      35 + matchRate * 250;
+  /*
+   * EVEN
+   */
 
-    rightScore =
-      70 - matchRate * 80;
+  if (
+    contract === "even" &&
+    evenRate > 0.55
+  ) {
+    score += 12;
+    patterns.push("even bias");
+  }
 
-    if (matchRate >= 0.1) {
+  /*
+   * ODD
+   */
+
+  if (
+    contract === "odd" &&
+    evenRate < 0.45
+  ) {
+    score += 12;
+    patterns.push("odd bias");
+  }
+
+  /*
+   * OVER
+   */
+
+  if (
+    contract === "over" &&
+    highRate > 0.55
+  ) {
+    score += 12;
+    patterns.push("over bias");
+  }
+
+  /*
+   * UNDER
+   */
+
+  if (
+    contract === "under" &&
+    highRate < 0.45
+  ) {
+    score += 12;
+    patterns.push("under bias");
+  }
+
+  /*
+   * MATCHES
+   */
+
+  if (contract === "matches") {
+    const rate =
+      frequency[target] /
+      recent.length;
+
+    if (rate > 0.1) {
+      score += 15;
+
       patterns.push(
         `digit ${target} concentration`
       );
-    } else {
+    }
+  }
+
+  /*
+   * DIFFERS
+   */
+
+  if (contract === "differs") {
+    const rate =
+      frequency[target] /
+      recent.length;
+
+    if (rate < 0.1) {
+      score += 12;
+
       patterns.push(
         `digit ${target} scarcity`
       );
     }
   }
 
-  /* ================= UNDER / OVER ================= */
+  /*
+   * RISE / FALL
+   */
 
-  if (activeTab === "under_over") {
-    const underRate =
-      recent.filter(
-        (digit) => digit < target
-      ).length / recent.length;
-
-    const overRate =
-      recent.filter(
-        (digit) => digit >= target
-      ).length / recent.length;
-
-    leftScore =
-      40 + underRate * 60;
-
-    rightScore =
-      40 + overRate * 60;
-
-    if (underRate > overRate) {
-      patterns.push("under bias");
-    } else {
-      patterns.push("over bias");
-    }
-  }
-
-  /* ================= EVEN / ODD ================= */
-
-  if (activeTab === "even_odd") {
-    const evenRate =
-      recent.filter(
-        (digit) => digit % 2 === 0
-      ).length / recent.length;
-
-    const oddRate = 1 - evenRate;
-
-    leftScore =
-      40 + evenRate * 60;
-
-    rightScore =
-      40 + oddRate * 60;
-
-    if (evenRate > oddRate) {
-      patterns.push("even bias");
-    } else {
-      patterns.push("odd bias");
-    }
-  }
-
-  /* ================= RISE / FALL ================= */
-
-  if (activeTab === "rise_fall") {
+  if (
+    (contract === "rise" ||
+      contract === "fall") &&
+    prices.length >= 8
+  ) {
     const recentPrices =
-      prices.slice(-10);
+      prices.slice(-8);
 
     let rises = 0;
     let falls = 0;
@@ -215,69 +263,31 @@ function calculateAnalysis(
       }
     }
 
-    leftScore =
-      40 + (rises / 9) * 60;
+    if (
+      contract === "rise" &&
+      rises >= 5
+    ) {
+      score += 18;
 
-    rightScore =
-      40 + (falls / 9) * 60;
-
-    if (rises > falls) {
       patterns.push(
         "upward pressure"
       );
-    } else if (falls > rises) {
+    }
+
+    if (
+      contract === "fall" &&
+      falls >= 5
+    ) {
+      score += 18;
+
       patterns.push(
         "downward pressure"
-      );
-    } else {
-      patterns.push(
-        "balanced movement"
       );
     }
   }
 
-  /* ================= GENERAL PATTERNS ================= */
-
-  if (
-    recent.length >= 2 &&
-    recent.at(-1) ===
-      recent.at(-2)
-  ) {
-    patterns.push("repetition");
-  }
-
-  if (
-    Math.max(...frequency) >= 5
-  ) {
-    patterns.push("digit cluster");
-  }
-
-  leftScore = Math.min(
-    99,
-    Math.max(1, Math.round(leftScore))
-  );
-
-  rightScore = Math.min(
-    99,
-    Math.max(1, Math.round(rightScore))
-  );
-
-  let prediction = "WAIT";
-
-  if (
-    leftScore >= 75 ||
-    rightScore >= 75
-  ) {
-    prediction =
-      leftScore >= rightScore
-        ? "LEFT"
-        : "RIGHT";
-  }
-
   return {
-    leftScore,
-    rightScore,
-    prediction,
+    score: Math.min(99, score),
     pattern:
       patterns.length
         ? patterns
@@ -287,271 +297,32 @@ function calculateAnalysis(
   };
 }
 
-/* =========================================================
-   LIVE MINI CHART
-========================================================= */
-
-function MiniChart({
-  prices,
-  color,
-}) {
-  if (!prices.length) {
-    return (
-      <div className="chartWaiting">
-        Waiting for ticks...
-      </div>
-    );
-  }
-
-  const values =
-    prices.slice(-25);
-
-  const min =
-    Math.min(...values);
-
-  const max =
-    Math.max(...values);
-
-  const range =
-    max - min || 1;
-
-  const points =
-    values
-      .map((value, index) => {
-        const x =
-          (index /
-            Math.max(
-              values.length - 1,
-              1
-            )) *
-          100;
-
-        const y =
-          90 -
-          ((value - min) /
-            range) *
-            75;
-
-        return `${x},${y}`;
-      })
-      .join(" ");
-
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="miniChart"
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-      />
-    </svg>
+function getPairForContract(contract) {
+  return PAIRS.find((pair) =>
+    pair.options.some(
+      ([id]) => id === contract
+    )
   );
 }
 
-/* =========================================================
-   MAIN DASHBOARD
-========================================================= */
+function getPredictionText(
+  contract,
+  target
+) {
+  switch (contract) {
+    case "matches":
+      return `MATCHES ${target}`;
 
-export default function Dashboard() {
-  const [activeTab, setActiveTab] =
-    useState(
-      "under_over"
-    );
+    case "differs":
+      return `DIFFERS ${target}`;
 
-  const [target, setTarget] =
-    useState(5);
+    case "under":
+      return "UNDER 5";
 
-  const [cards, setCards] =
-    useState(
-      markets.slice(0, 3).map(
-        (market) => ({
-          ...market,
-          prices: [],
-          digits: [],
-          connected: false,
+    case "over":
+      return "OVER 4";
 
-          confidence: 0,
+    case "even":
+      return "EVEN";
 
-          state: "waiting",
-
-          countdown: 0,
-
-          number: null,
-
-          prediction: "WAIT",
-
-          pattern:
-            "Collecting tick data",
-
-          leftScore: 0,
-
-          rightScore: 0,
-
-          signalId: null,
-        })
-      )
-    );
-
-  const [marketSelector, setMarketSelector] =
-    useState(null);
-
-  const sockets =
-    useRef({});
-
-  const countdownLocks =
-    useRef({});
-
-  /* =======================================================
-     CONNECT MARKET TO DERIV
-  ======================================================= */
-
-  function connectMarket(
-    market
-  ) {
-    const symbol =
-      market.code;
-
-    if (
-      sockets.current[symbol]
-    ) {
-      try {
-        sockets.current[
-          symbol
-        ].close();
-      } catch {}
-    }
-
-    let ws;
-
-    try {
-      ws =
-        new WebSocket(
-          WS_URL
-        );
-    } catch {
-      return;
-    }
-
-    sockets.current[
-      symbol
-    ] = ws;
-
-    ws.onopen = () => {
-      setCards((prev) =>
-        prev.map((card) =>
-          card.code === symbol
-            ? {
-                ...card,
-                connected: true,
-              }
-            : card
-        )
-      );
-
-      /* Historical ticks */
-
-      ws.send(
-        JSON.stringify({
-          ticks_history:
-            symbol,
-          count: 200,
-          end: "latest",
-          style: "ticks",
-          req_id: 1,
-        })
-      );
-
-      /* Live ticks */
-
-      ws.send(
-        JSON.stringify({
-          ticks: symbol,
-          subscribe: 1,
-          req_id: 2,
-        })
-      );
-    };
-
-    ws.onmessage = (
-      event
-    ) => {
-      try {
-        const message =
-          JSON.parse(
-            event.data
-          );
-
-        if (
-          message.error
-        ) {
-          console.error(
-            "Deriv:",
-            message.error
-              .message
-          );
-
-          return;
-        }
-
-        /* ================= HISTORY ================= */
-
-        if (
-          message.msg_type ===
-          "history"
-        ) {
-          const prices =
-            (
-              message.history
-                ?.prices || []
-            ).map(Number);
-
-          const digits =
-            prices
-              .map(
-                getLastDigit
-              )
-              .filter(
-                (digit) =>
-                  digit !== null
-              );
-
-          updateCardData(
-            symbol,
-            prices,
-            digits
-          );
-        }
-
-        /* ================= LIVE TICK ================= */
-
-        if (
-          message.msg_type ===
-          "tick"
-        ) {
-          const quote =
-            Number(
-              message.tick
-                ?.quote
-            );
-
-          if (
-            !Number.isFinite(
-              quote
-            )
-          ) {
-            return;
-          }
-
-          setCards(
-            (previous) => {
-              return previous.map(
-                (card) => {
-                  if (
-                    card.code !==
-                    symbol
-                  ) {
-                    return card;
+    case "
