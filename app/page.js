@@ -33,258 +33,148 @@ const PAIRS = [
 ];
 
 const MARKETS = [
-  {
-    name: "Volatility 50",
-    code: "R_50",
-    chartColor: "#22C55E",
-  },
-  {
-    name: "Volatility 50 (1s)",
-    code: "1HZ50V",
-    chartColor: "#22C55E",
-  },
-  {
-    name: "Volatility 75",
-    code: "R_75",
-    chartColor: "#EF4444",
-  },
-  {
-    name: "Volatility 75 (1s)",
-    code: "1HZ75V",
-    chartColor: "#EF4444",
-  },
-  {
-    name: "Volatility 100",
-    code: "R_100",
-    chartColor: "#22C55E",
-  },
-  {
-    name: "Volatility 100 (1s)",
-    code: "1HZ100V",
-    chartColor: "#22C55E",
-  },
+  { name: "Volatility 50", code: "R_50", color: "#22C55E" },
+  { name: "Volatility 50 (1s)", code: "1HZ50V", color: "#22C55E" },
+  { name: "Volatility 75", code: "R_75", color: "#EF4444" },
+  { name: "Volatility 75 (1s)", code: "1HZ75V", color: "#EF4444" },
+  { name: "Volatility 100", code: "R_100", color: "#22C55E" },
+  { name: "Volatility 100 (1s)", code: "1HZ100V", color: "#22C55E" },
 ];
 
-function getLastDigit(price) {
-  const text = String(price);
-  const digits = text.replace(/\D/g, "");
-
-  if (!digits.length) return null;
-
-  return Number(digits.at(-1));
+function lastDigit(price) {
+  const digits = String(price).replace(/\D/g, "");
+  return digits.length
+    ? Number(digits.at(-1))
+    : null;
 }
 
-function getPairAnalysis(
+function analyze(
   digits,
   prices,
-  pairId,
+  pair,
   target
 ) {
   if (digits.length < 30) {
     return {
-      leftScore: 0,
-      rightScore: 0,
+      left: 0,
+      right: 0,
       winner: "WAIT",
       pattern: "Collecting tick data",
     };
   }
 
   const recent = digits.slice(-30);
-
   const frequency = Array(10).fill(0);
 
-  recent.forEach((digit) => {
-    frequency[digit]++;
-  });
+  recent.forEach(
+    (d) => frequency[d]++
+  );
 
-  let leftScore = 50;
-  let rightScore = 50;
-
+  let left = 50;
+  let right = 50;
   const patterns = [];
 
-  /*
-   * MATCHES / DIFFERS
-   */
-  if (pairId === "matches_differs") {
-    const targetRate =
-      frequency[target] / recent.length;
+  if (pair === "matches_differs") {
+    const rate =
+      frequency[target] /
+      recent.length;
 
-    leftScore =
-      35 + targetRate * 180;
+    left = 35 + rate * 180;
+    right = 70 - rate * 100;
 
-    rightScore =
-      70 - targetRate * 100;
-
-    if (targetRate >= 0.1) {
-      patterns.push(
-        `digit ${target} concentration`
-      );
-    } else {
-      patterns.push(
-        `digit ${target} scarcity`
-      );
-    }
+    patterns.push(
+      rate >= 0.1
+        ? `digit ${target} concentration`
+        : `digit ${target} scarcity`
+    );
   }
 
-  /*
-   * UNDER / OVER
-   */
-  if (pairId === "under_over") {
-    const underCount =
+  if (pair === "under_over") {
+    const under =
       recent.filter(
-        (digit) => digit < target
-      ).length;
+        (d) => d < target
+      ).length /
+      recent.length;
 
-    const overCount =
+    const over =
       recent.filter(
-        (digit) => digit >= target
-      ).length;
+        (d) => d >= target
+      ).length /
+      recent.length;
 
-    const underRate =
-      underCount / recent.length;
+    left = 40 + under * 60;
+    right = 40 + over * 60;
 
-    const overRate =
-      overCount / recent.length;
-
-    leftScore =
-      40 + underRate * 60;
-
-    rightScore =
-      40 + overRate * 60;
-
-    if (underRate > overRate) {
-      patterns.push("under bias");
-    } else {
-      patterns.push("over bias");
-    }
+    patterns.push(
+      under > over
+        ? "under bias"
+        : "over bias"
+    );
   }
 
-  /*
-   * EVEN / ODD
-   */
-  if (pairId === "even_odd") {
-    const evenCount =
+  if (pair === "even_odd") {
+    const even =
       recent.filter(
-        (digit) => digit % 2 === 0
-      ).length;
+        (d) => d % 2 === 0
+      ).length /
+      recent.length;
 
-    const oddCount =
-      recent.length - evenCount;
+    const odd = 1 - even;
 
-    const evenRate =
-      evenCount / recent.length;
+    left = 40 + even * 60;
+    right = 40 + odd * 60;
 
-    const oddRate =
-      oddCount / recent.length;
-
-    leftScore =
-      40 + evenRate * 60;
-
-    rightScore =
-      40 + oddRate * 60;
-
-    if (evenRate > oddRate) {
-      patterns.push("even bias");
-    } else {
-      patterns.push("odd bias");
-    }
+    patterns.push(
+      even > odd
+        ? "even bias"
+        : "odd bias"
+    );
   }
 
-  /*
-   * RISE / FALL
-   */
-  if (pairId === "rise_fall") {
-    if (prices.length >= 10) {
-      const recentPrices =
-        prices.slice(-10);
+  if (pair === "rise_fall") {
+    const p = prices.slice(-10);
 
-      let rises = 0;
-      let falls = 0;
+    let rises = 0;
+    let falls = 0;
 
-      for (
-        let i = 1;
-        i < recentPrices.length;
-        i++
-      ) {
-        if (
-          recentPrices[i] >
-          recentPrices[i - 1]
-        ) {
-          rises++;
-        }
-
-        if (
-          recentPrices[i] <
-          recentPrices[i - 1]
-        ) {
-          falls++;
-        }
-      }
-
-      leftScore =
-        40 +
-        (rises / 9) * 60;
-
-      rightScore =
-        40 +
-        (falls / 9) * 60;
-
-      if (rises > falls) {
-        patterns.push(
-          "upward pressure"
-        );
-      } else if (falls > rises) {
-        patterns.push(
-          "downward pressure"
-        );
-      } else {
-        patterns.push(
-          "balanced movement"
-        );
-      }
+    for (let i = 1; i < p.length; i++) {
+      if (p[i] > p[i - 1]) rises++;
+      if (p[i] < p[i - 1]) falls++;
     }
+
+    left = 40 + (rises / 9) * 60;
+    right = 40 + (falls / 9) * 60;
+
+    patterns.push(
+      rises > falls
+        ? "upward pressure"
+        : falls > rises
+        ? "downward pressure"
+        : "balanced movement"
+    );
   }
 
-  leftScore = Math.min(
-    99,
-    Math.round(leftScore)
-  );
-
-  rightScore = Math.min(
-    99,
-    Math.round(rightScore)
-  );
+  left = Math.min(99, Math.round(left));
+  right = Math.min(99, Math.round(right));
 
   let winner = "WAIT";
 
-  if (
-    Math.max(leftScore, rightScore) >= 75
-  ) {
+  if (Math.max(left, right) >= 75) {
     winner =
-      leftScore >= rightScore
-        ? PAIRS.find(
-            (p) => p.id === pairId
-          ).left
-        : PAIRS.find(
-            (p) => p.id === pairId
-          ).right;
+      left >= right
+        ? "LEFT"
+        : "RIGHT";
   }
 
   return {
-    leftScore,
-    rightScore,
+    left,
+    right,
     winner,
-    pattern:
-      patterns.length
-        ? patterns.join(" + ")
-        : "mixed conditions",
+    pattern: patterns.join(" + "),
   };
 }
 
-function MiniChart({
-  prices,
-  color,
-}) {
+function Chart({ prices, color }) {
   if (!prices.length) {
     return (
       <div className="chartEmpty">
@@ -293,31 +183,25 @@ function MiniChart({
     );
   }
 
-  const values =
-    prices.slice(-25);
-
+  const values = prices.slice(-25);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
 
-  const points =
-    values
-      .map((value, index) => {
-        const x =
-          (index /
-            (values.length - 1 || 1)) *
-          100;
+  const points = values
+    .map((value, i) => {
+      const x =
+        (i /
+          Math.max(values.length - 1, 1)) *
+        100;
 
-        const y =
-          100 -
-          ((value - min) /
-            range) *
-            80 -
-          10;
+      const y =
+        90 -
+        ((value - min) / range) * 75;
 
-        return `${x},${y}`;
-      })
-      .join(" ");
+      return `${x},${y}`;
+    })
+    .join(" ");
 
   return (
     <svg
@@ -335,46 +219,50 @@ function MiniChart({
   );
 }
 
-function MarketCard({
+function Card({
   market,
   data,
-  onSwitch,
   pair,
   target,
+  onSwitch,
 }) {
-  const price =
-    data.prices.at(-1);
+  const price = data.prices.at(-1);
+  const digit = data.digits.at(-1);
 
-  const digit =
-    data.digits.at(-1);
-
-  const analysis =
-    data.analysis;
+  const leftName = pair.left;
+  const rightName = pair.right;
 
   const winner =
-    analysis.winner;
+    data.analysis.winner;
 
-  const activeSignal =
-    winner !== "WAIT";
+  const signal =
+    winner === "LEFT"
+      ? leftName
+      : winner === "RIGHT"
+      ? rightName
+      : "WAIT";
 
-  const winnerScore =
-    winner === pair.left
-      ? analysis.leftScore
-      : winner === pair.right
-      ? analysis.rightScore
-      : 0;
+  const confidence =
+    winner === "LEFT"
+      ? data.analysis.left
+      : winner === "RIGHT"
+      ? data.analysis.right
+      : Math.max(
+          data.analysis.left,
+          data.analysis.right
+        );
 
   return (
-    <div
-      className={`marketCard ${
-        activeSignal
-          ? "activeCard"
+    <article
+      className={`card ${
+        signal !== "WAIT"
+          ? "signalCard"
           : ""
       }`}
     >
-      <div className="cardTop">
-        <div
-          className="marketName"
+      <div className="cardHeader">
+        <button
+          className="marketButton"
           onClick={onSwitch}
         >
           <strong>
@@ -382,94 +270,85 @@ function MarketCard({
           </strong>
 
           <span>
-            {market.code}
+            {market.code} ▾
           </span>
-        </div>
+        </button>
 
-        <div className="liveStatus">
-          <span
-            className={
-              data.connected
-                ? "liveDot"
-                : "offlineDot"
-            }
-          />
-
+        <span
+          className={
+            data.connected
+              ? "live"
+              : "offline"
+          }
+        >
+          ●{" "}
           {data.connected
             ? "LIVE"
             : "OFFLINE"}
-        </div>
+        </span>
       </div>
 
-      <div className="chartArea">
-        <MiniChart
+      <div className="chartBox">
+        <Chart
           prices={data.prices}
-          color={
-            market.chartColor
-          }
+          color={market.color}
         />
       </div>
 
       <div className="price">
-        {price !== undefined
-          ? price
-          : "—"}
+        {price ?? "—"}
       </div>
 
       <div className="digitCircle">
-        {digit !== undefined
-          ? digit
-          : "—"}
+        {digit ?? "—"}
       </div>
 
-      <div className="predictionLabel">
+      <div className="label">
         PREDICTION
       </div>
 
-      <div className="pairPredictions">
+      <div className="pair">
         <div
           className={
-            winner === pair.left
-              ? "predictionSide winner"
-              : "predictionSide"
+            winner === "LEFT"
+              ? "side selected"
+              : "side"
           }
         >
-          <span>
-            {pair.left}
-          </span>
-
+          <span>{leftName}</span>
           <strong>
-            {analysis.leftScore}%
+            {data.analysis.left}%
           </strong>
         </div>
 
         <div
           className={
-            winner === pair.right
-              ? "predictionSide winner"
-              : "predictionSide"
+            winner === "RIGHT"
+              ? "side selected"
+              : "side"
           }
         >
-          <span>
-            {pair.right}
-          </span>
-
+          <span>{rightName}</span>
           <strong>
-            {analysis.rightScore}%
+            {data.analysis.right}%
           </strong>
         </div>
       </div>
 
-      <div className="mainPrediction">
-        {winner === "WAIT"
-          ? "WAIT"
-          : winner === pair.left
-          ? pair.left
-          : pair.right}
+      <div className="prediction">
+        {signal}
+        {signal !== "WAIT" &&
+          pair.id ===
+            "under_over" &&
+          ` ${target}`}
+        {signal !== "WAIT" &&
+          pair.id ===
+            "matches_differs" &&
+          ` ${target}`}
       </div>
 
       <div className="pattern">
-        {analysis.pattern}
+        {data.analysis.pattern}
       </div>
 
       <div className="confidence">
@@ -478,18 +357,18 @@ function MarketCard({
         </span>
 
         <strong>
-          {winnerScore}%
+          {confidence}%
         </strong>
       </div>
 
-      <div className="entryBox">
+      <div className="entry">
         {data.signalActive ? (
           <>
             <small>
-              SIGNAL ACTIVE
+              ENTRY SIGNAL
             </small>
 
-            <strong className="enterNow">
+            <strong className="enter">
               ⚡ ENTER NOW
             </strong>
           </>
@@ -506,7 +385,7 @@ function MarketCard({
         ) : (
           <>
             <small>
-              ENTRY
+              STATUS
             </small>
 
             <strong>
@@ -517,12 +396,12 @@ function MarketCard({
       </div>
 
       <button
-        className="switchButton"
+        className="switch"
         onClick={onSwitch}
       >
         SWITCH MARKET
       </button>
-    </div>
+    </article>
   );
 }
 
@@ -542,7 +421,7 @@ export default function Dashboard() {
       MARKETS[2],
     ]);
 
-  const [marketData, setMarketData] =
+  const [data, setData] =
     useState({});
 
   const [selector, setSelector] =
@@ -553,31 +432,13 @@ export default function Dashboard() {
 
   const pair =
     PAIRS.find(
-      (item) =>
-        item.id === activePair
+      (p) => p.id === activePair
     );
 
-  function calculate(
-    digits,
-    prices
-  ) {
-    return getPairAnalysis(
-      digits,
-      prices,
-      activePair,
-      Number(target)
-    );
-  }
+  function connect(market) {
+    const symbol = market.code;
 
-  function connectMarket(
-    market
-  ) {
-    const symbol =
-      market.code;
-
-    if (
-      sockets.current[symbol]
-    ) {
+    if (sockets.current[symbol]) {
       try {
         sockets.current[
           symbol
@@ -591,17 +452,464 @@ export default function Dashboard() {
       ws = new WebSocket(
         WS_URL
       );
-
-      sockets.current[
-        symbol
-      ] = ws;
     } catch {
       return;
     }
 
+    sockets.current[symbol] = ws;
+
     ws.onopen = () => {
-      setMarketData(
-        (prev) => ({
+      setData((prev) => ({
+        ...prev,
+        [symbol]: {
+          ...(prev[symbol] || {}),
+          connected: true,
+        },
+      }));
+
+      ws.send(
+        JSON.stringify({
+          ticks_history: symbol,
+          count: 200,
+          end: "latest",
+          style: "ticks",
+          req_id: 1,
+        })
+      );
+
+      ws.send(
+        JSON.stringify({
+          ticks: symbol,
+          subscribe: 1,
+          req_id: 2,
+        })
+      );
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message =
+          JSON.parse(
+            event.data
+          );
+
+        if (
+          message.error
+        ) {
+          console.error(
+            "Deriv:",
+            message.error.message
+          );
+          return;
+        }
+
+        if (
+          message.msg_type ===
+          "history"
+        ) {
+          const prices =
+            (
+              message.history
+                ?.prices || []
+            ).map(Number);
+
+          const digits =
+            prices
+              .map(lastDigit)
+              .filter(
+                (d) => d !== null
+              );
+
+          setData((prev) => ({
+            ...prev,
+            [symbol]: {
+              ...(prev[symbol] || {}),
+              prices,
+              digits,
+              connected: true,
+              analysis:
+                analyze(
+                  digits,
+                  prices,
+                  activePair,
+                  target
+                ),
+            },
+          }));
+        }
+
+        if (
+          message.msg_type ===
+          "tick"
+        ) {
+          const quote =
+            Number(
+              message.tick?.quote
+            );
+
+          if (
+            !Number.isFinite(
+              quote
+            )
+          ) {
+            return;
+          }
+
+          setData((prev) => {
+            const old =
+              prev[symbol] || {};
+
+            const prices = [
+              ...(old.prices || []),
+              quote,
+            ].slice(-300);
+
+            const digit =
+              lastDigit(quote);
+
+            const digits = [
+              ...(old.digits || []),
+              digit,
+            ].slice(-300);
+
+            return {
+              ...prev,
+              [symbol]: {
+                ...old,
+                prices,
+                digits,
+                connected: true,
+                analysis:
+                  analyze(
+                    digits,
+                    prices,
+                    activePair,
+                    target
+                  ),
+              },
+            };
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    ws.onclose = () => {
+      setData((prev) => ({
+        ...prev,
+        [symbol]: {
+          ...(prev[symbol] || {}),
+          connected: false,
+        },
+      }));
+    };
+  }
+
+  useEffect(() => {
+    selectedMarkets.forEach(
+      connect
+    );
+
+    return () => {
+      Object.values(
+        sockets.current
+      ).forEach((ws) => {
+        try {
+          ws.close();
+        } catch {}
+      });
+    };
+  }, [selectedMarkets]);
+
+  /*
+   * Update analysis when
+   * the selected pair changes.
+   */
+  useEffect(() => {
+    setData((prev) => {
+      const next = {
+        ...prev,
+      };
+
+      Object.keys(next).forEach(
+        (symbol) => {
+          const item =
+            next[symbol];
+
+          if (!item?.digits)
+            return;
+
+          next[symbol] = {
+            ...item,
+            analysis:
+              analyze(
+                item.digits,
+                item.prices,
+                activePair,
+                target
+              ),
+          };
+        }
+      );
+
+      return next;
+    });
+  }, [
+    activePair,
+    target,
+  ]);
+
+  /*
+   * Start countdown ONLY
+   * when a valid signal appears.
+   *
+   * It does not restart
+   * because a new tick arrived.
+   */
+  useEffect(() => {
+    selectedMarkets.forEach(
+      (market) => {
+        const item =
+          data[market.code];
+
+        if (!item) return;
+
+        if (
+          item.digits?.length <
+          30
+        ) {
+          return;
+        }
+
+        const confidence =
+          Math.max(
+            item.analysis?.left ||
+              0,
+            item.analysis?.right ||
+              0
+          );
+
+        if (
+          confidence >= 75 &&
+          !item.countdown &&
+          !item.signalActive
+        ) {
+          setData((prev) => ({
+            ...prev,
+            [market.code]: {
+              ...prev[
+                market.code
+              ],
+              countdown: 4,
+              signalActive: false,
+            },
+          }));
+        }
+      }
+    );
+  }, [data, selectedMarkets]);
+
+  /*
+   * Stable countdown.
+   */
+  useEffect(() => {
+    const timer =
+      setInterval(() => {
+        setData((prev) => {
+          const next = {
+            ...prev,
+          };
+
+          Object.keys(next).forEach(
+            (symbol) => {
+              const item =
+                next[symbol];
+
+              if (
+                !item ||
+                !item.countdown
+              ) {
+                return;
+              }
+
+              const remaining =
+                item.countdown - 1;
+
+              next[symbol] = {
+                ...item,
+                countdown:
+                  remaining,
+                signalActive:
+                  remaining === 0,
+              };
+            }
+          );
+
+          return next;
+        });
+      }, 1000);
+
+    return () =>
+      clearInterval(timer);
+  }, []);
+
+  function changeMarket(
+    index,
+    market
+  ) {
+    setSelectedMarkets(
+      (prev) => {
+        const next = [
           ...prev,
-          [symbol]: {
-            ...(
+        ];
+
+        next[index] =
+          market;
+
+        return next;
+      }
+    );
+
+    setSelector(null);
+  }
+
+  return (
+    <>
+      <style jsx global>{`
+        @import url(
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
+        );
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          background: #0d0d0f;
+          color: #fff;
+          font-family: Inter, sans-serif;
+        }
+
+        button,
+        input {
+          font-family: inherit;
+        }
+
+        .app {
+          min-height: 100vh;
+          padding: 24px;
+          background:
+            radial-gradient(
+              circle at top,
+              #17171d,
+              #0d0d0f 55%
+            );
+        }
+
+        .header {
+          max-width: 1400px;
+          margin: auto;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 22px;
+        }
+
+        .header h1 {
+          margin: 0;
+          font-size: 26px;
+          font-weight: 800;
+        }
+
+        .header p {
+          margin: 5px 0 0;
+          color: #9ca3af;
+          font-size: 10px;
+          letter-spacing: 3px;
+        }
+
+        .real {
+          color: #22c55e;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .real::before {
+          content: "●";
+          margin-right: 6px;
+          text-shadow: 0 0 8px #22c55e;
+        }
+
+        .controls {
+          max-width: 1400px;
+          margin: auto;
+          margin-bottom: 15px;
+        }
+
+        .target {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          background: #1a1a1f;
+          border: 1px solid #2a2a30;
+          border-radius: 10px;
+          padding: 9px 12px;
+          color: #9ca3af;
+          font-size: 9px;
+          font-weight: 800;
+        }
+
+        .target input {
+          width: 40px;
+          padding: 5px;
+          border-radius: 6px;
+          border: 1px solid #2a2a30;
+          background: #0d0d0f;
+          color: #fff;
+          text-align: center;
+          outline: none;
+        }
+
+        .tabs {
+          max-width: 1400px;
+          margin: auto;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 8px;
+          margin-bottom: 18px;
+        }
+
+        .tab {
+          padding: 12px;
+          border-radius: 11px;
+          background: #1a1a1f;
+          border: 1px solid #2a2a30;
+          color: #9ca3af;
+          cursor: pointer;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .tab.active {
+          background: #2563eb;
+          border-color: #2563eb;
+          color: #fff;
+          box-shadow:
+            0 0 22px
+            rgba(37,99,235,.22);
+        }
+
+        .cards {
+          max-width: 1400px;
+          margin: auto;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+        }
+
+        .card {
+          background: #1a1a1f;
+          border: 1px solid #2a2a30;
+          border-radius: 18px
