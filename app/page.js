@@ -655,3 +655,499 @@ export default function Home() {
       {/* MARKET */}
 
       <section className="
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#1A1A1F",
+            border: "1px solid #2A2A30",
+            borderRadius: "14px",
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              color: "#9CA3AF",
+              fontSize: "11px",
+            }}
+          >
+            LIVE PRICE
+          </div>
+
+          <strong
+            style={{
+              fontSize: "20px",
+            }}
+          >
+            {price ?? "—"}
+          </strong>
+        </div>
+
+        <div
+          style={{
+            background: "#1A1A1F",
+            border: "1px solid #2A2A30",
+            borderRadius: "14px",
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              color: "#9CA3AF",
+              fontSize: "11px",
+            }}
+          >
+            LAST DIGIT
+          </div>
+
+          <strong
+            style={{
+              fontSize: "20px",
+              color: "#2563EB",
+            }}
+          >
+            {lastDigit ?? "—"}
+          </strong>
+        </div>
+      </section>
+
+      {/* SIGNAL CARD */}
+
+      <section
+        style={{
+          background: "#1A1A1F",
+          border: "1px solid #2A2A30",
+          borderRadius: "20px",
+          padding: "22px",
+          marginBottom: "20px",
+          boxShadow:
+            "0 0 35px rgba(37,99,235,0.08)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "15px",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "20px",
+              }}
+            >
+              {market.name}
+            </h2>
+
+            <span
+              style={{
+                color: "#9CA3AF",
+                fontSize: "12px",
+              }}
+            >
+              {market.code}
+            </span>
+          </div>
+
+          <div
+            style={{
+              color: connected
+                ? "#22C55E"
+                : "#EF4444",
+              fontSize: "12px",
+              fontWeight: 800,
+            }}
+          >
+            ● LIVE
+          </div>
+        </div>
+
+        <div
+          style={{
+            height: "80px",
+            marginBottom: "15px",
+          }}
+        >
+          <Sparkline
+            prices={prices}
+            color={market.chartColor}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            margin: "10px 0 18px",
+          }}
+        >
+          <div
+            style={{
+              width: "90px",
+              height: "90px",
+              borderRadius: "50%",
+              background: "#2563EB",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "26px",
+              fontWeight: 900,
+              boxShadow:
+                "0 0 35px rgba(37,99,235,0.35)",
+            }}
+          >
+            {predictionBadge}
+          </div>
+        </div>
+
+        <div
+          style={{
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              color: "#9CA3AF",
+              fontSize: "11px",
+              letterSpacing: "1px",
+            }}
+          >
+            PREDICTION
+          </div>
+
+          <div
+            style={{
+              fontSize: "26px",
+              fontWeight: 900,
+              marginTop: "5px",
+            }}
+          >
+            {prediction}
+          </div>
+
+          <div
+            style={{
+              color: "#9CA3AF",
+              fontSize: "13px",
+              marginTop: "5px",
+            }}
+          >
+            {predictionSubtext}
+          </div>
+        </div>
+
+        {/* ENTRY COUNTDOWN */}
+
+        <div
+          style={{
+            marginTop: "22px",
+            background:
+              entryCountdown === 0
+                ? "rgba(34,197,94,0.12)"
+                : "rgba(245,158,11,0.10)",
+            border:
+              entryCountdown === 0
+                ? "1px solid #22C55E"
+                : "1px solid #F59E0B",
+            borderRadius: "16px",
+            padding: "16px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              color: "#9CA3AF",
+              fontSize: "11px",
+              letterSpacing: "1px",
+            }}
+          >
+            ENTRY
+          </div>
+
+          <div
+            style={{
+              color:
+                entryCountdown === 0
+                  ? "#22C55E"
+                  : "#FBBF24",
+              fontSize: "24px",
+              fontWeight: 900,
+              marginTop: "4px",
+            }}
+          >
+            {entryCountdown === 0
+              ? "⚡ ENTER NOW"
+              : `IN ${entryCountdown}s`}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: "18px",
+          }}
+        >
+          <span
+            style={{
+              color: "#FBBF24",
+              fontWeight: 800,
+            }}
+          >
+            Confidence: {analysis.score}%
+          </span>
+
+          <span
+            style={{
+              color:
+                analysis.score >= 75
+                  ? "#22C55E"
+                  : "#FBBF24",
+              fontWeight: 900,
+            }}
+          >
+            SIGNAL ENGINE {strength}
+          </span>
+        </div>
+      </section>
+
+      {/* CURRENT ANALYSIS */}
+
+      <section
+        style={{
+          background: "#1A1A1F",
+          border: "1px solid #2A2A30",
+          borderRadius: "16px",
+          padding: "18px",
+          marginBottom: "20px",
+        }}
+      >
+        <div
+          style={{
+            color: "#9CA3AF",
+            fontSize: "11px",
+            marginBottom: "6px",
+          }}
+        >
+          CURRENT ANALYSIS
+        </div>
+
+        <h3
+          style={{
+            margin: "0 0 10px",
+            fontSize: "18px",
+          }}
+        >
+          {analysis.pattern}
+        </h3>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <strong
+            style={{
+              color:
+                analysis.score >= 75
+                  ? "#22C55E"
+                  : "#FBBF24",
+              fontSize: "24px",
+            }}
+          >
+            {analysis.score}%
+          </strong>
+
+          <span
+            style={{
+              color: "#9CA3AF",
+              fontSize: "12px",
+            }}
+          >
+            MODEL STATUS: {strength}
+          </span>
+        </div>
+      </section>
+
+      {/* RECENT DIGITS */}
+
+      <section
+        style={{
+          background: "#1A1A1F",
+          border: "1px solid #2A2A30",
+          borderRadius: "16px",
+          padding: "18px",
+          marginBottom: "20px",
+        }}
+      >
+        <div
+          style={{
+            color: "#9CA3AF",
+            fontSize: "11px",
+            marginBottom: "6px",
+          }}
+        >
+          LAST DIGIT ANALYSIS
+        </div>
+
+        <h3
+          style={{
+            margin: "0 0 12px",
+          }}
+        >
+          Recent Digits
+        </h3>
+
+        <div
+          style={{
+            color: "#9CA3AF",
+            fontSize: "12px",
+            marginBottom: "12px",
+          }}
+        >
+          {digits.length} ticks
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "6px",
+            flexWrap: "wrap",
+          }}
+        >
+          {digits
+            .slice(-30)
+            .map((digit, index) => (
+              <span
+                key={`${index}-${digit}`}
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "7px",
+                  background:
+                    digit === lastDigit
+                      ? "#2563EB"
+                      : "#0D0D0F",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                }}
+              >
+                {digit}
+              </span>
+            ))}
+        </div>
+      </section>
+
+      {/* SIGNAL HISTORY */}
+
+      <section
+        style={{
+          background: "#1A1A1F",
+          border: "1px solid #2A2A30",
+          borderRadius: "16px",
+          padding: "18px",
+        }}
+      >
+        <h2
+          style={{
+            margin: "0 0 15px",
+            fontSize: "18px",
+          }}
+        >
+          Signal History
+        </h2>
+
+        {signals.length === 0 ? (
+          <div
+            style={{
+              color: "#9CA3AF",
+              textAlign: "center",
+              padding: "20px",
+            }}
+          >
+            Waiting for a valid signal...
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            {signals.map((signal) => (
+              <div
+                key={signal.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "80px 1fr auto",
+                  gap: "10px",
+                  alignItems: "center",
+                  background: "#0D0D0F",
+                  border: "1px solid #2A2A30",
+                  borderRadius: "10px",
+                  padding: "10px",
+                }}
+              >
+                <span
+                  style={{
+                    color: "#9CA3AF",
+                    fontSize: "11px",
+                  }}
+                >
+                  {signal.time}
+                </span>
+
+                <div>
+                  <strong>
+                    {signal.type}
+                  </strong>
+
+                  <div
+                    style={{
+                      color: "#9CA3AF",
+                      fontSize: "11px",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {signal.pattern}
+                  </div>
+                </div>
+
+                <strong
+                  style={{
+                    color: "#22C55E",
+                  }}
+                >
+                  {signal.score}%
+                </strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <footer
+        style={{
+          textAlign: "center",
+          color: "#6B7280",
+          fontSize: "11px",
+          marginTop: "20px",
+        }}
+      >
+        ALGORITHM HACKER • SIGNAL-ONLY MODE • REAL DERIV DATA
+      </footer>
+    </main>
+  );
+}
