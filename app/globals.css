@@ -317,5 +317,14 @@ footer {
     grid-template-columns:
       1fr 1fr;
   }
-
+.errorBox {
+  margin-bottom: 15px;
+  padding: 12px 15px;
+  border: 1px solid #E50914;
+  border-radius: 10px;
+  background: rgba(229, 9, 20, 0.1);
+  color: #FF6B73;
+  font-size: 12px;
+  font-weight: 700;
+}
 }
