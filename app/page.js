@@ -253,8 +253,12 @@ export default function Home() {
       ws = new WebSocket(WS_URL);
       socketRef.current = ws;
     } catch (err) {
-      setStatus("WebSocket creation failed");
+      setStatus(
+        "WebSocket creation failed"
+      );
+
       setError(String(err));
+
       return;
     }
 
@@ -270,12 +274,16 @@ export default function Home() {
       setError("");
 
       /*
-       * Ask Deriv for available symbols.
+       * Request available symbols.
+       *
+       * IMPORTANT:
+       * product_type has intentionally
+       * been removed.
        */
+
       ws.send(
         JSON.stringify({
           active_symbols: "brief",
-          product_type: "basic",
           req_id: 1,
         })
       );
@@ -283,6 +291,7 @@ export default function Home() {
       /*
        * Request historical ticks.
        */
+
       ws.send(
         JSON.stringify({
           ticks_history: symbol,
@@ -296,6 +305,7 @@ export default function Home() {
       /*
        * Subscribe to live ticks.
        */
+
       ws.send(
         JSON.stringify({
           ticks: symbol,
@@ -323,8 +333,9 @@ export default function Home() {
         );
 
         /*
-         * API error
+         * Deriv API error
          */
+
         if (data.error) {
           setError(
             data.error.message ||
@@ -337,8 +348,9 @@ export default function Home() {
         }
 
         /*
-         * Active symbols response.
+         * Active symbols
          */
+
         if (
           data.msg_type ===
           "active_symbols"
@@ -357,8 +369,9 @@ export default function Home() {
         }
 
         /*
-         * Historical tick data.
+         * Historical ticks
          */
+
         if (
           data.msg_type === "history" &&
           data.history?.prices
@@ -390,8 +403,9 @@ export default function Home() {
         }
 
         /*
-         * Live tick.
+         * Live tick
          */
+
         if (
           data.msg_type === "tick" &&
           data.tick
@@ -448,6 +462,7 @@ export default function Home() {
       if (!mountedRef.current) return;
 
       setConnected(false);
+
       setStatus(
         "WebSocket connection error"
       );
@@ -473,8 +488,9 @@ export default function Home() {
       );
 
       /*
-       * Retry after 5 seconds.
+       * Reconnect after 5 seconds.
        */
+
       reconnectRef.current =
         setTimeout(() => {
           connect();
@@ -566,8 +582,11 @@ export default function Home() {
     digits.length,
   ]);
 
-  const price = prices.at(-1);
-  const lastDigit = digits.at(-1);
+  const price =
+    prices.at(-1);
+
+  const lastDigit =
+    digits.at(-1);
 
   const strength =
     analysis.score >= 80
@@ -584,6 +603,7 @@ export default function Home() {
       <header className="header">
 
         <div>
+
           <h1>
             ALGORITHM HACKER
           </h1>
@@ -591,6 +611,7 @@ export default function Home() {
           <p>
             SIGNAL ENGINE
           </p>
+
         </div>
 
         <div
@@ -613,7 +634,8 @@ export default function Home() {
 
       <div className="serverBox">
         API MESSAGE:{" "}
-        {serverMessage || "waiting..."}
+        {serverMessage ||
+          "waiting..."}
       </div>
 
       <section className="controls">
@@ -638,6 +660,7 @@ export default function Home() {
               )
             )}
           </select>
+
         </label>
 
         <label>
@@ -652,6 +675,7 @@ export default function Home() {
               setTarget(e.target.value)
             }
           />
+
         </label>
 
         <button
@@ -697,155 +721,4 @@ export default function Home() {
           </div>
 
           <p>
-            LAST DIGIT
-          </p>
-
-          <div className="lastDigit">
-            {lastDigit ?? "—"}
-          </div>
-
-          <p>
-            LIVE TICKS
-          </p>
-
-          <div className="tickCount">
-            {tickCount}
-          </div>
-
-        </div>
-
-        <div className="card">
-
-          <p>
-            RECENT LAST DIGITS
-          </p>
-
-          <div className="digits">
-
-            {digits
-              .slice(-40)
-              .map(
-                (digit, index) => (
-                  <span
-                    key={index}
-                  >
-                    {digit}
-                  </span>
-                )
-              )}
-
-          </div>
-
-          <p className="patternTitle">
-            PATTERN
-          </p>
-
-          <strong>
-            {analysis.pattern}
-          </strong>
-
-        </div>
-
-        <div className="card">
-
-          <p>
-            MODEL SCORE
-          </p>
-
-          <div className="confidence">
-            {analysis.score}%
-          </div>
-
-          <div className="meter">
-
-            <div
-              style={{
-                width:
-                  `${analysis.score}%`,
-              }}
-            />
-
-          </div>
-
-          <div className="strength">
-            {strength}
-          </div>
-
-          <div className="signal">
-
-            <p>
-              SIGNAL
-            </p>
-
-            <strong>
-              {
-                CONTRACTS.find(
-                  ([id]) =>
-                    id === contract
-                )?.[1]
-              }
-            </strong>
-
-            <span>
-              ENTRY: NEXT TICK
-            </span>
-
-          </div>
-
-        </div>
-
-      </section>
-
-      <section className="card history">
-
-        <h2>
-          SIGNAL HISTORY
-        </h2>
-
-        {signals.length === 0 ? (
-
-          <div className="empty">
-            Waiting for a valid signal...
-          </div>
-
-        ) : (
-
-          signals.map(
-            (signal) => (
-              <div
-                className="historyRow"
-                key={signal.id}
-              >
-
-                <span>
-                  {signal.time}
-                </span>
-
-                <strong>
-                  {signal.type}
-                </strong>
-
-                <b>
-                  {signal.score}%
-                </b>
-
-                <small>
-                  {signal.pattern}
-                </small>
-
-              </div>
-            )
-          )
-
-        )}
-
-      </section>
-
-      <footer>
-        SIGNAL-ONLY MODE • REAL DERIV DATA •
-        NO TRADE EXECUTION
-      </footer>
-
-    </main>
-  );
-}
+            LAST DIG
