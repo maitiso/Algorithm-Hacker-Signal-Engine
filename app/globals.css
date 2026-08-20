@@ -328,3 +328,24 @@ footer {
   font-weight: 700;
 }
 }
+.serverBox {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid #272B35;
+  border-radius: 8px;
+  background: #111318;
+  color: #9CA3AF;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.errorBox {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid #E50914;
+  border-radius: 8px;
+  background: rgba(229, 9, 20, 0.1);
+  color: #FF6B73;
+  font-size: 11px;
+  font-weight: 700;
+}
