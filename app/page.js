@@ -140,7 +140,8 @@ function calculateAnalysis(
       contract === "fall") &&
     prices.length >= 8
   ) {
-    const recentPrices = prices.slice(-8);
+    const recentPrices =
+      prices.slice(-8);
 
     let rises = 0;
     let falls = 0;
@@ -170,7 +171,9 @@ function calculateAnalysis(
       rises >= 5
     ) {
       score += 18;
-      patterns.push("upward pressure");
+      patterns.push(
+        "upward pressure"
+      );
     }
 
     if (
@@ -178,7 +181,9 @@ function calculateAnalysis(
       falls >= 5
     ) {
       score += 18;
-      patterns.push("downward pressure");
+      patterns.push(
+        "downward pressure"
+      );
     }
   }
 
@@ -186,15 +191,216 @@ function calculateAnalysis(
     score: Math.min(99, score),
     pattern:
       patterns.length > 0
-        ? patterns.slice(0, 3).join(" + ")
+        ? patterns
+            .slice(0, 3)
+            .join(" + ")
         : "mixed conditions",
   };
 }
 
+function MiniChart({ prices }) {
+  const data = prices.slice(-30);
+
+  if (data.length < 2) {
+    return (
+      <div className="miniChartEmpty">
+        Waiting for chart data...
+      </div>
+    );
+  }
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const points = data
+    .map((value, index) => {
+      const x =
+        (index /
+          Math.max(data.length - 1, 1)) *
+        100;
+
+      const y =
+        38 -
+        ((value - min) / range) *
+          32;
+
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const rising =
+    data.at(-1) >= data.at(0);
+
+  return (
+    <svg
+      className="miniChart"
+      viewBox="0 0 100 40"
+      preserveAspectRatio="none"
+    >
+      <polyline
+        points={points}
+        fill="none"
+        stroke={
+          rising
+            ? "#22C55E"
+            : "#EF4444"
+        }
+        strokeWidth="1.8"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+function SignalCard({
+  title,
+  code,
+  badge,
+  prediction,
+  description,
+  confidence,
+  prices,
+  accent,
+  entrySeconds,
+  onCountdownComplete,
+}) {
+  const [seconds, setSeconds] =
+    useState(entrySeconds);
+
+  useEffect(() => {
+    setSeconds(entrySeconds);
+  }, [entrySeconds]);
+
+  useEffect(() => {
+    if (seconds <= 0) {
+      onCountdownComplete?.();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSeconds(
+        (value) => value - 1
+      );
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [seconds, onCountdownComplete]);
+
+  const active = confidence >= 75;
+
+  return (
+    <div
+      className={`signalCard ${
+        active ? "signalCardActive" : ""
+      }`}
+      style={{
+        "--accent": accent,
+      }}
+    >
+      <div className="cardTop">
+        <div>
+          <h2>{title}</h2>
+          <span>{code}</span>
+        </div>
+
+        <div className="liveStatus">
+          <span className="pin">●</span>
+          <span className="liveDot" />
+          LIVE
+        </div>
+      </div>
+
+      <div className="chartArea">
+        <MiniChart prices={prices} />
+      </div>
+
+      <div
+        className="predictionCircle"
+        style={{
+          background: accent,
+        }}
+      >
+        {badge}
+      </div>
+
+      <div className="predictionBlock">
+        <span className="predictionLabel">
+          PREDICTION
+        </span>
+
+        <strong>
+          {prediction}
+        </strong>
+
+        <small>
+          {description}
+        </small>
+      </div>
+
+      <div
+        className={`entryBox ${
+          seconds === 0
+            ? "entryNow"
+            : ""
+        }`}
+      >
+        <span>ENTRY</span>
+
+        {seconds === 0 ? (
+          <strong>
+            ⚡ ENTER NOW
+          </strong>
+        ) : (
+          <strong>
+            IN {seconds}s
+          </strong>
+        )}
+      </div>
+
+      <div className="confidenceRow">
+        <span>
+          Confidence
+        </span>
+
+        <strong>
+          {confidence}%
+        </strong>
+      </div>
+
+      <div className="confidenceBar">
+        <div
+          style={{
+            width: `${confidence}%`,
+            background: accent,
+          }}
+        />
+      </div>
+
+      <div className="cardFooter">
+        <span>
+          SIGNAL ENGINE
+        </span>
+
+        <span>
+          {active
+            ? "VALID SETUP"
+            : "WATCH"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
-  const socketRef = useRef(null);
-  const reconnectRef = useRef(null);
-  const mountedRef = useRef(true);
+  const socketRef =
+    useRef(null);
+
+  const reconnectRef =
+    useRef(null);
+
+  const mountedRef =
+    useRef(true);
 
   const [symbol, setSymbol] =
     useState("R_50");
@@ -229,11 +435,17 @@ export default function Home() {
   const [signals, setSignals] =
     useState([]);
 
+  const [entryCycle, setEntryCycle] =
+    useState(0);
+
   const connect = () => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current)
+      return;
 
     if (reconnectRef.current) {
-      clearTimeout(reconnectRef.current);
+      clearTimeout(
+        reconnectRef.current
+      );
     }
 
     if (socketRef.current) {
@@ -243,68 +455,58 @@ export default function Home() {
     }
 
     setConnected(false);
-    setStatus("Connecting to Deriv...");
+    setStatus(
+      "Connecting to Deriv..."
+    );
     setError("");
     setServerMessage("");
 
     let ws;
 
     try {
-      ws = new WebSocket(WS_URL);
+      ws = new WebSocket(
+        WS_URL
+      );
+
       socketRef.current = ws;
     } catch (err) {
       setStatus(
         "WebSocket creation failed"
       );
 
-      setError(String(err));
+      setError(
+        String(err)
+      );
 
       return;
     }
 
     ws.onopen = () => {
-      if (!mountedRef.current) return;
-
-      console.log(
-        "Connected to Deriv public WebSocket"
-      );
+      if (!mountedRef.current)
+        return;
 
       setConnected(true);
       setStatus("Connected");
       setError("");
 
-      /*
-       * Request available symbols.
-       *
-       * IMPORTANT:
-       * product_type has intentionally
-       * been removed.
-       */
-
       ws.send(
         JSON.stringify({
-          active_symbols: "brief",
+          active_symbols:
+            "brief",
           req_id: 1,
         })
       );
 
-      /*
-       * Request historical ticks.
-       */
-
       ws.send(
         JSON.stringify({
-          ticks_history: symbol,
+          ticks_history:
+            symbol,
           count: 200,
           end: "latest",
           style: "ticks",
           req_id: 2,
         })
       );
-
-      /*
-       * Subscribe to live ticks.
-       */
 
       ws.send(
         JSON.stringify({
@@ -315,41 +517,41 @@ export default function Home() {
       );
     };
 
-    ws.onmessage = (event) => {
-      if (!mountedRef.current) return;
+    ws.onmessage = (
+      event
+    ) => {
+      if (!mountedRef.current)
+        return;
 
       try {
         const data =
-          JSON.parse(event.data);
+          JSON.parse(
+            event.data
+          );
 
         console.log(
-          "DERIV MESSAGE:",
+          "DERIV:",
           data
         );
 
         setServerMessage(
           data.msg_type ||
-            "message received"
+            "message"
         );
-
-        /*
-         * Deriv API error
-         */
 
         if (data.error) {
           setError(
-            data.error.message ||
+            data.error
+              .message ||
               "Deriv API error"
           );
 
-          setStatus("Deriv API error");
+          setStatus(
+            "Deriv API error"
+          );
 
           return;
         }
-
-        /*
-         * Active symbols
-         */
 
         if (
           data.msg_type ===
@@ -358,22 +560,20 @@ export default function Home() {
           const exists =
             data.active_symbols?.some(
               (item) =>
-                item.symbol === symbol
+                item.symbol ===
+                symbol
             );
 
           if (!exists) {
             setError(
-              `${symbol} was not returned by Deriv active_symbols`
+              `${symbol} unavailable`
             );
           }
         }
 
-        /*
-         * Historical ticks
-         */
-
         if (
-          data.msg_type === "history" &&
+          data.msg_type ===
+            "history" &&
           data.history?.prices
         ) {
           const historical =
@@ -383,18 +583,24 @@ export default function Home() {
 
           const historicalDigits =
             historical
-              .map(getLastDigit)
+              .map(
+                getLastDigit
+              )
               .filter(
                 (digit) =>
                   digit !== null
               );
 
           setPrices(
-            historical.slice(-300)
+            historical.slice(
+              -300
+            )
           );
 
           setDigits(
-            historicalDigits.slice(-300)
+            historicalDigits.slice(
+              -300
+            )
           );
 
           setStatus(
@@ -402,36 +608,47 @@ export default function Home() {
           );
         }
 
-        /*
-         * Live tick
-         */
-
         if (
-          data.msg_type === "tick" &&
+          data.msg_type ===
+            "tick" &&
           data.tick
         ) {
           const quote =
-            Number(data.tick.quote);
+            Number(
+              data.tick.quote
+            );
 
           const digit =
-            getLastDigit(quote);
+            getLastDigit(
+              quote
+            );
 
           if (
-            !Number.isFinite(quote) ||
+            !Number.isFinite(
+              quote
+            ) ||
             digit === null
           ) {
             return;
           }
 
-          setPrices((previous) => [
-            ...previous.slice(-299),
-            quote,
-          ]);
+          setPrices(
+            (previous) => [
+              ...previous.slice(
+                -299
+              ),
+              quote,
+            ]
+          );
 
-          setDigits((previous) => [
-            ...previous.slice(-299),
-            digit,
-          ]);
+          setDigits(
+            (previous) => [
+              ...previous.slice(
+                -299
+              ),
+              digit,
+            ]
+          );
 
           setTickCount(
             (previous) =>
@@ -444,22 +661,16 @@ export default function Home() {
 
           setError("");
         }
-      } catch (err) {
-        console.error(err);
-
+      } catch {
         setError(
           "Could not parse Deriv response"
         );
       }
     };
 
-    ws.onerror = (event) => {
-      console.error(
-        "DERIV WEBSOCKET ERROR:",
-        event
-      );
-
-      if (!mountedRef.current) return;
+    ws.onerror = () => {
+      if (!mountedRef.current)
+        return;
 
       setConnected(false);
 
@@ -468,28 +679,21 @@ export default function Home() {
       );
 
       setError(
-        "Browser could not establish the Deriv WebSocket connection."
+        "Could not connect to Deriv."
       );
     };
 
-    ws.onclose = (event) => {
-      console.log(
-        "Deriv socket closed:",
-        event.code,
-        event.reason
-      );
-
-      if (!mountedRef.current) return;
+    ws.onclose = (
+      event
+    ) => {
+      if (!mountedRef.current)
+        return;
 
       setConnected(false);
 
       setStatus(
         `Disconnected (${event.code})`
       );
-
-      /*
-       * Reconnect after 5 seconds.
-       */
 
       reconnectRef.current =
         setTimeout(() => {
@@ -504,15 +708,20 @@ export default function Home() {
     connect();
 
     return () => {
-      mountedRef.current = false;
+      mountedRef.current =
+        false;
 
-      if (reconnectRef.current) {
+      if (
+        reconnectRef.current
+      ) {
         clearTimeout(
           reconnectRef.current
         );
       }
 
-      if (socketRef.current) {
+      if (
+        socketRef.current
+      ) {
         try {
           socketRef.current.close();
         } catch {}
@@ -520,21 +729,62 @@ export default function Home() {
     };
   }, [symbol]);
 
-  const analysis = useMemo(
-    () =>
-      calculateAnalysis(
+  const analysis =
+    useMemo(
+      () =>
+        calculateAnalysis(
+          digits,
+          prices,
+          contract,
+          Number(target)
+        ),
+      [
         digits,
         prices,
         contract,
-        Number(target)
-      ),
-    [
-      digits,
-      prices,
-      contract,
-      target,
-    ]
-  );
+        target,
+      ]
+    );
+
+  const underAnalysis =
+    useMemo(
+      () =>
+        calculateAnalysis(
+          digits,
+          prices,
+          "under",
+          5
+        ),
+      [digits, prices]
+    );
+
+  const overAnalysis =
+    useMemo(
+      () =>
+        calculateAnalysis(
+          digits,
+          prices,
+          "over",
+          4
+        ),
+      [digits, prices]
+    );
+
+  const differsAnalysis =
+    useMemo(
+      () =>
+        calculateAnalysis(
+          digits,
+          prices,
+          "differs",
+          Number(target)
+        ),
+      [
+        digits,
+        prices,
+        target,
+      ]
+    );
 
   useEffect(() => {
     if (
@@ -547,7 +797,8 @@ export default function Home() {
 
     const label =
       CONTRACTS.find(
-        ([id]) => id === contract
+        ([id]) =>
+          id === contract
       )?.[1];
 
     const signal = {
@@ -556,25 +807,30 @@ export default function Home() {
       time:
         new Date().toLocaleTimeString(),
       type: label,
-      score: analysis.score,
-      pattern: analysis.pattern,
+      score:
+        analysis.score,
+      pattern:
+        analysis.pattern,
     };
 
-    setSignals((previous) => {
-      if (
-        previous.some(
-          (item) =>
-            item.id === signal.id
-        )
-      ) {
-        return previous;
-      }
+    setSignals(
+      (previous) => {
+        if (
+          previous.some(
+            (item) =>
+              item.id ===
+              signal.id
+          )
+        ) {
+          return previous;
+        }
 
-      return [
-        signal,
-        ...previous,
-      ].slice(0, 20);
-    });
+        return [
+          signal,
+          ...previous,
+        ].slice(0, 20);
+      }
+    );
   }, [
     tickCount,
     analysis,
@@ -588,22 +844,56 @@ export default function Home() {
   const lastDigit =
     digits.at(-1);
 
-  const strength =
-    analysis.score >= 80
-      ? "STRONG"
-      : analysis.score >= 75
-      ? "VALID"
-      : analysis.score >= 60
-      ? "WATCH"
-      : "WAIT";
+  /*
+   * New countdown cycle whenever
+   * the live analysis reaches a valid
+   * signal threshold.
+   *
+   * This is a UI timing window,
+   * not a guarantee of outcome.
+   */
+
+  useEffect(() => {
+    if (
+      analysis.score >= 75 &&
+      digits.length >= 30
+    ) {
+      setEntryCycle(
+        (value) => value + 1
+      );
+    }
+  }, [
+    tickCount,
+    analysis.score >= 75,
+  ]);
+
+  const countdownSeed =
+    useMemo(() => {
+      return (
+        1 +
+        (Math.abs(
+          tickCount * 17 +
+            Number(lastDigit || 0)
+        ) %
+          5)
+      );
+    }, [
+      tickCount,
+      lastDigit,
+    ]);
 
   return (
     <main className="app">
 
+      <div className="demoBanner">
+        ⚠️ SIGNAL ENGINE • REAL DERIV
+        DATA • SIGNAL-ONLY • NO TRADE
+        EXECUTION
+      </div>
+
       <header className="header">
 
         <div>
-
           <h1>
             ALGORITHM HACKER
           </h1>
@@ -611,7 +901,6 @@ export default function Home() {
           <p>
             SIGNAL ENGINE
           </p>
-
         </div>
 
         <div
@@ -621,7 +910,11 @@ export default function Home() {
               : "status"
           }
         >
-          ● {status}
+          <span className="liveDot" />
+
+          {connected
+            ? "LIVE"
+            : "OFFLINE"}
         </div>
 
       </header>
@@ -646,7 +939,9 @@ export default function Home() {
           <select
             value={symbol}
             onChange={(e) =>
-              setSymbol(e.target.value)
+              setSymbol(
+                e.target.value
+              )
             }
           >
             {SYMBOLS.map(
@@ -660,7 +955,6 @@ export default function Home() {
               )
             )}
           </select>
-
         </label>
 
         <label>
@@ -672,13 +966,15 @@ export default function Home() {
             max="9"
             value={target}
             onChange={(e) =>
-              setTarget(e.target.value)
+              setTarget(
+                e.target.value
+              )
             }
           />
-
         </label>
 
         <button
+          className="reconnectButton"
           onClick={connect}
         >
           RECONNECT
@@ -708,17 +1004,258 @@ export default function Home() {
 
       </section>
 
-      <section className="dashboard">
+      <section className="marketSummary">
 
-        <div className="card">
+        <div>
+          <span>
+            MARKET
+          </span>
 
-          <p>
+          <strong>
+            {symbol}
+          </strong>
+        </div>
+
+        <div>
+          <span>
             LIVE PRICE
-          </p>
+          </span>
 
-          <div className="price">
+          <strong>
             {price ?? "—"}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            LAST DIGIT
+          </span>
+
+          <strong className="bigDigit">
+            {lastDigit ?? "—"}
+          </strong>
+        </div>
+
+        <div>
+          <span>
+            TICKS
+          </span>
+
+          <strong>
+            {tickCount}
+          </strong>
+        </div>
+
+      </section>
+
+      <section className="signalGrid">
+
+        <SignalCard
+          title="Volatility 10 (1s)"
+          code="1HZ10V"
+          badge="U5"
+          prediction="UNDER 5"
+          description="Last digit < 5 • wins on 0–4"
+          confidence={
+            underAnalysis.score
+          }
+          prices={prices}
+          accent="#00D4AA"
+          entrySeconds={
+            countdownSeed
+          }
+        />
+
+        <SignalCard
+          title="Volatility 10 (1s)"
+          code="1HZ10V"
+          badge="04"
+          prediction="OVER 4"
+          description="Last digit > 4 • wins on 5–9"
+          confidence={
+            overAnalysis.score
+          }
+          prices={prices}
+          accent="#F59E0B"
+          entrySeconds={
+            Math.max(
+              1,
+              (countdownSeed + 2) %
+                6
+            )
+          }
+        />
+
+        <SignalCard
+          title="Volatility 10 (1s)"
+          code="1HZ10V"
+          badge={`D${target}`}
+          prediction={`DIFFERS ${target}`}
+          description={`Last digit ≠ ${target}`}
+          confidence={
+            differsAnalysis.score
+          }
+          prices={prices}
+          accent="#2563EB"
+          entrySeconds={
+            Math.max(
+              1,
+              (countdownSeed + 4) %
+                6
+            )
+          }
+        />
+
+      </section>
+
+      <section className="analysisPanel">
+
+        <div className="analysisHeader">
+          <div>
+            <span>
+              CURRENT ANALYSIS
+            </span>
+
+            <h2>
+              {analysis.pattern}
+            </h2>
           </div>
 
-          <p>
-            LAST DIG
+          <div className="scoreLarge">
+            {analysis.score}%
+          </div>
+        </div>
+
+        <div className="analysisBar">
+          <div
+            style={{
+              width:
+                `${analysis.score}%`,
+            }}
+          />
+        </div>
+
+        <div className="analysisMeta">
+
+          <span>
+            MODEL STATUS
+          </span>
+
+          <strong>
+            {analysis.score >= 75
+              ? "VALID SETUP"
+              : analysis.score >=
+                60
+              ? "WATCH"
+              : "WAITING"}
+          </strong>
+
+        </div>
+
+      </section>
+
+      <section className="digitsPanel">
+
+        <div className="sectionHeading">
+          <div>
+            <span>
+              LAST DIGIT ANALYSIS
+            </span>
+
+            <h2>
+              Recent Digits
+            </h2>
+          </div>
+
+          <div className="digitCount">
+            {digits.length} ticks
+          </div>
+        </div>
+
+        <div className="digits">
+
+          {digits
+            .slice(-40)
+            .map(
+              (digit, index) => (
+                <span
+                  key={`${index}-${digit}`}
+                  className={
+                    digit ===
+                    lastDigit
+                      ? "digit activeDigit"
+                      : "digit"
+                  }
+                >
+                  {digit}
+                </span>
+              )
+            )}
+
+        </div>
+
+      </section>
+
+      <section className="history">
+
+        <div className="sectionHeading">
+
+          <div>
+            <span>
+              SIGNAL LOG
+            </span>
+
+            <h2>
+              Signal History
+            </h2>
+          </div>
+
+        </div>
+
+        {signals.length === 0 ? (
+          <div className="empty">
+            Waiting for a valid signal...
+          </div>
+        ) : (
+          <div className="historyList">
+
+            {signals.map(
+              (signal) => (
+                <div
+                  className="historyRow"
+                  key={signal.id}
+                >
+
+                  <span>
+                    {signal.time}
+                  </span>
+
+                  <strong>
+                    {signal.type}
+                  </strong>
+
+                  <b>
+                    {signal.score}%
+                  </b>
+
+                  <small>
+                    {signal.pattern}
+                  </small>
+
+                </div>
+              )
+            )}
+
+          </div>
+        )}
+
+      </section>
+
+      <footer>
+        ALGORITHM HACKER • SIGNAL-ONLY
+        MODE • REAL DERIV MARKET DATA
+      </footer>
+
+    </main>
+  );
+}
